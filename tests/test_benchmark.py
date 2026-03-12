@@ -1,4 +1,4 @@
-# file: tests/test_bmssp_benchmark.py
+# file: tests/test_benchmark.py
 
 from __future__ import annotations
 
@@ -32,6 +32,23 @@ def _make_random_sparse_weighted_graph(
         edges=list(edges),
         directed=True,
     )
+
+@pytest.mark.skip("Skipping Benchmark for Dijkstra's algorithm")
+def test_dijkstra_timing() -> None:
+    graph = _make_random_sparse_weighted_graph(
+        num_vertices=800000,
+        num_edges=3200000,
+        seed=42,
+    )
+    engine = CpuPathEngine()
+    source = 0
+
+    t0 = time.perf_counter()
+    shortest_path_lengths(graph, engine, source, method="default")
+    t1 = time.perf_counter()
+
+    print(f"vertices={graph.num_vertices}, edges={len(graph.indices)}, source={source}")
+    print(f"default sssp time: {t1 - t0:.6f} sec")
 
 
 @pytest.mark.skip(reason="BMSSP is experimental and not yet correctness-stable")
