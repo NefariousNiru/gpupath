@@ -1,7 +1,0 @@
-numpy>=2.4.1
-
-[dev]
-pytest>=8.3
-pytest-cov>=5.0
-black>=26
-isort>=8.0.0
