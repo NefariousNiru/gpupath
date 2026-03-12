@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NewType
+from typing import List, NewType
 
 VertexId = NewType("VertexId", int)
 """A type alias representing a vertex identifier in a graph."""
@@ -13,6 +13,9 @@ UNREACHABLE_DISTANCE: int = -1
 
 NO_PREDECESSOR: int = -1
 """Sentinel value indicating that a vertex has no predecessor (i.e. it is the source or unreachable)."""
+
+INF_FLOAT = float("inf")
+"""Float +ve infinity"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,5 +33,23 @@ class BfsResult:
             the source vertex or was not reachable.
     """
 
-    distances: list[int]
-    predecessors: list[int]
+    distances: List[int]
+    predecessors: List[int]
+
+
+@dataclass(frozen=True, slots=True)
+class SsspResult:
+    """Stores the result of a Single-Source Shortest Path traversal.
+
+    Attributes:
+        distances: A list where ``distances[v]`` holds the minimum path cost
+            from the source to vertex ``v``. Unreachable vertices have value
+            ``INF_FLOAT``.
+        predecessors: A list where ``predecessors[v]`` holds the predecessor
+            of vertex ``v`` on one shortest path from the source. A value of
+            ``NO_PREDECESSOR`` indicates that ``v`` is the source or is
+            unreachable.
+    """
+
+    distances: List[float]
+    predecessors: List[int]

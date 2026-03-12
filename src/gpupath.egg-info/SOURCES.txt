@@ -12,3 +12,6 @@ src/gpupath.egg-info/top_level.txt
 src/gpupath/engine/__init__.py
 src/gpupath/engine/base.py
 src/gpupath/engine/cpu.py
+src/gpupath/engine/cpu_bmssp.py
+tests/test_bfs.py
+tests/test_graph.py

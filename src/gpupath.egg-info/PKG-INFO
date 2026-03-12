@@ -14,3 +14,4 @@ Provides-Extra: dev
 Requires-Dist: pytest>=8.3; extra == "dev"
 Requires-Dist: pytest-cov>=5.0; extra == "dev"
 Requires-Dist: black>=26; extra == "dev"
+Requires-Dist: isort>=8.0.0; extra == "dev"
