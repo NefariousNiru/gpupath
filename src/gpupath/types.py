@@ -9,13 +9,13 @@ VertexId = NewType("VertexId", int)
 """A type alias representing a vertex identifier in a graph."""
 
 UNREACHABLE_DISTANCE: int = -1
-"""Sentinel value indicating that a vertex is unreachable from the BFS source."""
+"""Sentinel value indicating that a vertex is unreachable from the BFS (unweighted) source."""
 
 NO_PREDECESSOR: int = -1
 """Sentinel value indicating that a vertex has no predecessor (i.e. it is the source or unreachable)."""
 
 INF_FLOAT = float("inf")
-"""Float +ve infinity"""
+"""Sentinel value indicating that a vertex is unreachable from the SSSP (weighted) source. Float +ve infinity"""
 
 
 @dataclass(frozen=True, slots=True)

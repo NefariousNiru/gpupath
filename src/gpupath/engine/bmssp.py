@@ -268,7 +268,13 @@ def _bmssp(
     k: int,
     t: int,
 ) -> tuple[float, set[int]]:
-    """Recursive BMSSP procedure (Algorithm 3 of the paper).
+    """
+    Experimental deterministic SSSP implementation.
+
+    This method is under active validation and is not currently part of the
+    stable correctness contract of the library.
+
+    Recursive BMSSP procedure (Algorithm 3 of the paper).
 
     Args:
         graph: The graph being traversed.

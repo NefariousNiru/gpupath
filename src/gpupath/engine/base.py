@@ -76,9 +76,9 @@ class PathEngine(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
+    # @abstractmethod
     def bmssp(self, graph: CSRGraph, source: int) -> SsspResult:
-        """Run BMSSP from *source* on *graph*.
+        """Experimental: Run BMSSP from *source* on *graph*.
 
         Implements the deterministic ``O(m log^(2/3) n)`` algorithm from:
 

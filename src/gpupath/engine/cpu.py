@@ -21,9 +21,8 @@ from gpupath.types import (
 class CpuPathEngine(PathEngine):
     """A CPU-based implementation of :class:`~gpupath.engine.base.PathEngine`.
 
-    All algorithms run on the host using pure Python. This engine is intended
-    as a reference implementation and for use in environments where a GPU is
-    not available.
+    This backend runs entirely on the host and serves as the correctness
+    baseline for future accelerated backends.
     """
 
     def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
