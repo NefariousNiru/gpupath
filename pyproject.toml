@@ -1,6 +1,9 @@
 [build-system]
-requires = ["setuptools>=80", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = [
+    "scikit-build-core>=0.10,<1",
+    "pybind11>=3.0"
+]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "gpupath"
@@ -9,12 +12,12 @@ description = "GPU-accelerated shortest-path query engine for static graphs"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  { name = "Nirupom Bose Roy", email = "nirupomboseroy99@gmail.com" }
+  { name = "NefariousNiru", email = "nirupomboseroy99@gmail.com" }
 ]
 license = { text = "MIT" }
 
 dependencies = [
-    "numpy>=2.4.1"
+    "pybind11>=3.0"
 ]
 
 [project.optional-dependencies]
@@ -23,7 +26,6 @@ dev = [
     "pytest-cov>=5.0",
     "black>=26",
     "isort>=8.0.0"
-
 ]
 
 [project.urls]
@@ -31,13 +33,18 @@ Homepage = "https://github.com/NefariousNiru/gpupath"
 Repository = "https://github.com/NefariousNiru/gpupath"
 Issues = "https://github.com/NefariousNiru/gpupath/issues"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["src/gpupath"]
+build-dir = "build/{wheel_tag}"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build.cmake]
+version = ">=3.18"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra -q"
+
+[tool.black]
+target-version = ["py312"]

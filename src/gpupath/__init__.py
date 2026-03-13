@@ -17,6 +17,7 @@ Primary exports:
 """
 
 from gpupath.engine.cpu import CpuPathEngine
+from gpupath.engine.native_cpu import NativeCpuPathEngine
 from gpupath.graph import CSRGraph
 from gpupath.query import (
     cost_matrix,
@@ -28,6 +29,7 @@ from gpupath.query import (
 __all__ = [
     "CSRGraph",
     "CpuPathEngine",
+    "NativeCpuPathEngine",
     "shortest_path_lengths",
     "predecessors",
     "shortest_path",
