@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import gpupath._native as _native
 from gpupath.engine.base import PathEngine
 from gpupath.graph import CSRGraph
-from gpupath.types import BfsResult
-
-import gpupath._native as _native
+from gpupath.types import BfsResult, SsspResult
 
 
 class NativeCpuPathEngine(PathEngine):
@@ -56,5 +55,40 @@ class NativeCpuPathEngine(PathEngine):
             predecessors=list(native_result.predecessors),
         )
 
-    def sssp(self, graph: CSRGraph, source: int):
-        raise NotImplementedError("Native CPU SSSP is not implemented yet")
+    def sssp(self, graph: CSRGraph, source: int) -> SsspResult:
+        """Run Single-Source Shortest Path (SSSP) from *source* on *graph*.
+
+        Computes the minimum-cost distance and predecessor vertex for every
+        vertex reachable from *source* using the native C++ backend.
+        Unreachable vertices retain ``inf`` in ``distances`` and ``-1`` in
+        ``predecessors``.
+
+        Args:
+            graph: The graph to traverse, stored in CSR format.
+            source: The vertex from which the search is initiated. Must be a
+                valid vertex id in ``[0, graph.num_vertices)``.
+
+        Returns:
+            A :class:`~gpupath.types.SsspResult` whose ``distances[v]`` holds
+            the minimum path cost from *source* to vertex ``v``, and
+            ``predecessors[v]`` holds the vertex that last relaxed the edge
+            into ``v``.
+
+        Raises:
+            ValueError: If *source* is outside ``[0, graph.num_vertices)``.
+        """
+        try:
+            native_result = _native.sssp(
+                graph.num_vertices,
+                graph.indptr,
+                graph.indices,
+                graph.weights,
+                source,
+            )
+        except IndexError as exc:
+            raise ValueError(f"source {source} out of range") from exc
+
+        return SsspResult(
+            distances=list(native_result.distances),
+            predecessors=list(native_result.predecessors),
+        )

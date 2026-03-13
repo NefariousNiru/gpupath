@@ -1,11 +1,7 @@
 # file: tests/test_native_bfs.py
 
 import gpupath._native as native
-
 from gpupath import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
-
-
 from gpupath.engine.native_cpu import NativeCpuPathEngine
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult
