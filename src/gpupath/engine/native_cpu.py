@@ -2,50 +2,29 @@
 
 from __future__ import annotations
 
-import gpupath._native as _native
+from gpupath.engine.base import PathEngine
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult
 
+import gpupath._native as _native
 
-class NativeCpuPathEngine:
-    """A CPU-based path engine backed by the native C++ extension.
 
-    Delegates all computation to the compiled ``_native`` module, which
-    provides the same algorithms as :class:`~gpupath.engine.cpu.CpuPathEngine`
-    but implemented in C++ for improved performance.
+class NativeCpuPathEngine(PathEngine):
+    """A native CPU-backed implementation of :class:`~gpupath.engine.base.PathEngine`.
 
-    Use this engine as a drop-in replacement for
-    :class:`~gpupath.engine.cpu.CpuPathEngine` when the native extension
-    has been built.
+    This backend dispatches core graph traversals to the compiled C++ extension
+    while preserving the same Python-facing contract as :class:`CpuPathEngine`.
+
+    It is intended to serve as the first compiled backend and to remain
+    behaviorally equivalent to the pure-Python CPU engine.
     """
 
-    @staticmethod
-    def backend_name() -> str:
-        """Return the identifier for this engine backend.
-
-        Returns:
-            The string ``"native-cpu"``.
-        """
-        return "native-cpu"
-
-    @staticmethod
-    def native_version() -> str:
-        """Return the version string reported by the native C++ module.
-
-        Returns:
-            A human-readable version string from ``_native.version()``.
-        """
-        return _native.version()
-
-    @staticmethod
-    def bfs(graph: CSRGraph, source: int) -> BfsResult:
+    def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
         """Run Breadth-First Search from *source* on *graph*.
 
-        Delegates to the native C++ ``bfs_unweighted`` implementation.
-        Computes the shortest-hop distance and predecessor vertex for
-        every vertex reachable from *source*. Unreachable vertices retain
-        ``UNREACHABLE_DISTANCE`` and ``NO_PREDECESSOR`` as their sentinel
-        values.
+        Computes the shortest-hop distance and predecessor vertex for every
+        vertex reachable from *source* using the native C++ backend.
+        Unreachable vertices retain ``-1`` in both arrays.
 
         Args:
             graph: The graph to traverse, stored in CSR format.
@@ -53,18 +32,29 @@ class NativeCpuPathEngine:
                 valid vertex id in ``[0, graph.num_vertices)``.
 
         Returns:
-            A :class:`~gpupath.types.BfsResult` whose ``distances[v]``
-            holds the shortest-hop distance from *source* to vertex ``v``,
-            and ``predecessors[v]`` holds the vertex that discovered ``v``
-            during traversal. Both arrays are indexed by vertex id.
+            A :class:`~gpupath.types.BfsResult` whose ``distances[v]`` holds
+            the shortest-hop distance from *source* to vertex ``v``, and
+            ``predecessors[v]`` holds the vertex that discovered ``v`` during
+            the traversal.
 
         Raises:
-            ValueError: If the CSR arrays are malformed.
-            IndexError: If *source* is outside ``[0, graph.num_vertices)``.
+            ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
-        return _native.bfs_unweighted(
-            graph.num_vertices,
-            graph.indptr,
-            graph.indices,
-            source,
+        try:
+            native_result = _native.bfs_unweighted(
+                graph.num_vertices,
+                graph.indptr,
+                graph.indices,
+                source,
+            )
+        except IndexError as exc:
+            # Preserve Python engine contract parity for invalid source.
+            raise ValueError(f"source {source} out of range") from exc
+
+        return BfsResult(
+            distances=list(native_result.distances),
+            predecessors=list(native_result.predecessors),
         )
+
+    def sssp(self, graph: CSRGraph, source: int):
+        raise NotImplementedError("Native CPU SSSP is not implemented yet")
