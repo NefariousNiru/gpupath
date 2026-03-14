@@ -13,6 +13,7 @@ pybind11_add_module(_native
         cpp/src/module.cpp
         cpp/src/bfs.cpp
         cpp/src/sssp.cpp
+        cpp/src/native_csr_graph.cpp
 )
 
 target_include_directories(_native PRIVATE cpp/include)

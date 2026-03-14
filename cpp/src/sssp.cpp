@@ -1,5 +1,6 @@
 // file: cpp/src/sssp.cpp
 
+#include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
 
 #include <functional>
@@ -20,7 +21,7 @@ namespace gpupath {
      *
      * If @p weights is not provided, each edge is assigned a unit cost of `1.0`.
      *
-     * @param num_vertices  Total number of vertices. Must be non-negative.
+     * @param num_vertices  Total number of vertices.
      * @param indptr        Row-pointer array of length `num_vertices + 1`.
      *                      Must be non-decreasing, start at `0`, and have
      *                      its last element equal to `indices.size()`.
@@ -44,17 +45,13 @@ namespace gpupath {
      *         outside `[0, num_vertices)`.
      */
     SsspResult sssp(
-        const int num_vertices,
+        const std::size_t num_vertices,
         const std::vector<int> &indptr,
         const std::vector<int> &indices,
         const std::optional<std::vector<double> > &weights,
         int source
     ) {
         // --- CSR validation --------------------------------------------------
-
-        if (num_vertices < 0) {
-            throw std::invalid_argument("num_vertices must be non-negative");
-        }
 
         if (source < 0 || source >= num_vertices) {
             throw std::out_of_range("source out of range");
@@ -76,7 +73,7 @@ namespace gpupath {
             throw std::invalid_argument("indptr last value must equal indices size");
         }
 
-        for (int i = 0; i < num_vertices; ++i) {
+        for (std::size_t i = 0; i < num_vertices; ++i) {
             if (indptr[i] > indptr[i + 1]) {
                 throw std::invalid_argument("indptr must be non-decreasing");
             }
@@ -107,7 +104,7 @@ namespace gpupath {
         std::priority_queue<
             HeapEntry,
             std::vector<HeapEntry>,
-            std::greater<HeapEntry>
+            std::greater<>
         > heap;
 
         result.distances[source] = 0.0;
@@ -146,5 +143,31 @@ namespace gpupath {
         }
 
         return result;
+    }
+
+    /**
+     * @brief Run SSSP on a prepared CSR graph.
+     *
+     * Convenience overload that forwards the CSR arrays stored in
+     * @ref NativeCsrGraph to the lower-level SSSP implementation.
+     *
+     * @param graph   Prepared CSR graph containing adjacency structure
+     *                and edge weights.
+     * @param source  Source vertex in `[0, graph.num_vertices())`.
+     *
+     * @return An `SsspResult` containing shortest-path distances and
+     *         predecessor vertices for each vertex.
+     *
+     * @throws std::out_of_range if @p source is outside the valid range.
+     * @throws std::invalid_argument if the graph does not contain weights.
+     */
+    SsspResult sssp(const NativeCsrGraph &graph, const int source) {
+        return sssp(
+            graph.num_vertices(),
+            graph.indptr(),
+            graph.indices(),
+            graph.weights(),
+            source
+        );
     }
 } // namespace gpupath

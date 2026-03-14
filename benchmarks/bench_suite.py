@@ -161,6 +161,125 @@ def print_speedup(label: str, baseline: BenchResult, contender: BenchResult) -> 
 
 
 # ---------------------------------------------------------------------------
+# Prepared-graph backend benchmarks
+# ---------------------------------------------------------------------------
+
+
+def run_bfs_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    source: int,
+    repeats: int,
+) -> None:
+    """Benchmark raw native CPU BFS vs prepared native CPU BFS on one graph."""
+    native_engine = NativeCpuPathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    def bench_native_bfs():
+        return native_engine.bfs(graph, source)
+
+    def bench_native_bfs_prepared():
+        return native_engine.bfs(prepared_graph, source)
+
+    native_result = timed_run(bench_native_bfs, repeats=repeats)
+    prepared_result = timed_run(bench_native_bfs_prepared, repeats=repeats)
+
+    print("[Kernel Benchmark] BFS prepared graph")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_sssp_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    source: int,
+    repeats: int,
+) -> None:
+    """Benchmark raw native CPU SSSP vs prepared native CPU SSSP on one graph."""
+    native_engine = NativeCpuPathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    def bench_native_sssp():
+        return native_engine.sssp(graph, source)
+
+    def bench_native_sssp_prepared():
+        return native_engine.sssp(prepared_graph, source)
+
+    native_result = timed_run(bench_native_sssp, repeats=repeats)
+    prepared_result = timed_run(bench_native_sssp_prepared, repeats=repeats)
+
+    print("[Kernel Benchmark] SSSP prepared graph")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_bfs_repeated_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    seed: int,
+) -> None:
+    """Benchmark repeated raw native BFS vs prepared native BFS."""
+    native_engine = NativeCpuPathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+
+    def bench_native_bfs_repeated():
+        return [native_engine.bfs(graph, source) for source in sources]
+
+    def bench_native_bfs_prepared_repeated():
+        return [native_engine.bfs(prepared_graph, source) for source in sources]
+
+    native_result = timed_run(bench_native_bfs_repeated, repeats=repeats)
+    prepared_result = timed_run(bench_native_bfs_prepared_repeated, repeats=repeats)
+
+    print("[Repeated Benchmark] BFS prepared graph")
+    print(f"sources={len(sources)}")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_sssp_repeated_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    seed: int,
+) -> None:
+    """Benchmark repeated raw native SSSP vs prepared native SSSP."""
+    native_engine = NativeCpuPathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+
+    def bench_native_sssp_repeated():
+        return [native_engine.sssp(graph, source) for source in sources]
+
+    def bench_native_sssp_prepared_repeated():
+        return [native_engine.sssp(prepared_graph, source) for source in sources]
+
+    native_result = timed_run(bench_native_sssp_repeated, repeats=repeats)
+    prepared_result = timed_run(bench_native_sssp_prepared_repeated, repeats=repeats)
+
+    print("[Repeated Benchmark] SSSP prepared graph")
+    print(f"sources={len(sources)}")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Kernel-level backend benchmarks
 # ---------------------------------------------------------------------------
 
@@ -386,11 +505,23 @@ def run_case(case: GraphCase, config: SuiteConfig) -> None:
     )
     print("=" * 88)
 
+    # For weighted use SSSP -> Dijkstra
     if case.weighted:
         run_sssp_backend_benchmark(
             graph,
             source=config.source,
             repeats=config.repeats_kernel,
+        )
+        run_sssp_prepared_backend_benchmark(
+            graph,
+            source=config.source,
+            repeats=config.repeats_kernel,
+        )
+        run_sssp_repeated_prepared_backend_benchmark(
+            graph,
+            repeats=config.repeats_api,
+            num_sources=config.matrix_sources,
+            seed=case.seed + 2000,
         )
         run_shortest_path_lengths_benchmark(
             graph,
@@ -411,11 +542,23 @@ def run_case(case: GraphCase, config: SuiteConfig) -> None:
                 source=config.source,
                 repeats=3,
             )
+    # Unweighted use BFS
     else:
         run_bfs_backend_benchmark(
             graph,
             source=config.source,
             repeats=config.repeats_kernel,
+        )
+        run_bfs_prepared_backend_benchmark(
+            graph,
+            source=config.source,
+            repeats=config.repeats_kernel,
+        )
+        run_bfs_repeated_prepared_backend_benchmark(
+            graph,
+            repeats=config.repeats_api,
+            num_sources=config.matrix_sources,
+            seed=case.seed + 2000,
         )
         run_shortest_path_lengths_benchmark(
             graph,

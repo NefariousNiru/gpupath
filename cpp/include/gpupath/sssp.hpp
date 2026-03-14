@@ -1,9 +1,11 @@
-#pragma once
 // file: cpp/include/gpupath/sssp.hpp
+
+#pragma once
 
 #include <optional>
 #include <vector>
 
+#include "gpupath/native_csr_graph.hpp"
 #include "gpupath/types.hpp"
 
 namespace gpupath {
@@ -36,8 +38,7 @@ namespace gpupath {
      *
      * where V is @p num_vertices and E is `indices.size()`.
      *
-     * @param num_vertices  Total number of vertices in the graph. Must be
-     *                      non-negative.
+     * @param num_vertices  Total number of vertices in the graph.
      * @param indptr        CSR row-pointer array of length `num_vertices + 1`.
      *                      `indptr[v]` and `indptr[v + 1]` delimit the outgoing
      *                      edges of vertex @p v in @p indices.
@@ -67,10 +68,27 @@ namespace gpupath {
      *         - any neighbor index in @p indices is outside `[0, num_vertices)`
      */
     SsspResult sssp(
-        int num_vertices,
+        std::size_t num_vertices,
         const std::vector<int> &indptr,
         const std::vector<int> &indices,
         const std::optional<std::vector<double> > &weights,
         int source
     );
+
+    /**
+     * @brief Run single-source shortest path from a prepared native CSR graph.
+     *
+     * If the graph stores explicit weights, those weights are used. Otherwise the
+     * graph is treated as unweighted with implicit edge cost ``1.0``.
+     *
+     * @param graph Prepared native CSR graph.
+     * @param source Source vertex id in ``[0, graph.num_vertices())``.
+     *
+     * @return Single-source shortest path result containing distances and
+     *         predecessors.
+     *
+     * @throws std::invalid_argument If any explicit edge weight is negative.
+     * @throws std::out_of_range If ``source`` is out of range.
+     */
+    [[nodiscard]] SsspResult sssp(const NativeCsrGraph &graph, int source);
 } // namespace gpupath

@@ -16,6 +16,7 @@ Primary exports:
 - cost_matrix: batched source-target shortest path distances
 """
 
+from gpupath.engine.base import PathEngine
 from gpupath.engine.cpu import CpuPathEngine
 from gpupath.engine.native_cpu import NativeCpuPathEngine
 from gpupath.graph import CSRGraph
@@ -28,6 +29,7 @@ from gpupath.query import (
 
 __all__ = [
     "CSRGraph",
+    "PathEngine",
     "CpuPathEngine",
     "NativeCpuPathEngine",
     "shortest_path_lengths",

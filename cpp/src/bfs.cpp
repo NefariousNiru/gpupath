@@ -35,16 +35,12 @@ namespace gpupath {
      *         outside `[0, num_vertices)`.
      */
     BfsResult bfs_unweighted(
-        int num_vertices,
+        const std::size_t num_vertices,
         const std::vector<int> &indptr,
         const std::vector<int> &indices,
-        int source
+        const int source
     ) {
         // --- CSR validation --------------------------------------------------
-
-        if (num_vertices < 0) {
-            throw std::invalid_argument("num_vertices must be non-negative");
-        }
 
         if (source < 0 || source >= num_vertices) {
             throw std::out_of_range("source out of range");
@@ -66,7 +62,7 @@ namespace gpupath {
             throw std::invalid_argument("indptr last value must equal indices size");
         }
 
-        for (int i = 0; i < num_vertices; ++i) {
+        for (std::size_t i = 0; i < num_vertices; ++i) {
             if (indptr[i] > indptr[i + 1]) {
                 throw std::invalid_argument("indptr must be non-decreasing");
             }
@@ -104,5 +100,34 @@ namespace gpupath {
         }
 
         return result;
+    }
+
+    /**
+     * @brief Run Breadth-First Search on a prepared CSR graph.
+     *
+     * Convenience overload that operates directly on a @ref NativeCsrGraph.
+     * The graph is assumed to already satisfy all CSR invariants because
+     * they are validated during construction of the NativeCsrGraph object.
+     *
+     * This simply forwards the graph's internal CSR storage to the
+     * array-based BFS implementation.
+     *
+     * @param graph   Prepared CSR graph.
+     * @param source  Source vertex in the range `[0, graph.num_vertices())`.
+     *
+     * @return A `BfsResult` whose `distances[v]` contains the shortest-hop
+     *         distance from @p source to vertex @p v, and whose
+     *         `predecessors[v]` contains the vertex that discovered @p v.
+     *         Unreachable vertices retain `-1` in both arrays.
+     *
+     * @throws std::out_of_range if @p source is outside the valid range.
+     */
+    BfsResult bfs_unweighted(const NativeCsrGraph &graph, const int source) {
+        return bfs_unweighted(
+            graph.num_vertices(),
+            graph.indptr(),
+            graph.indices(),
+            source
+        );
     }
 } // namespace gpupath

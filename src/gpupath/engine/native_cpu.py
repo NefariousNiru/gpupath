@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gpupath._native as _native
 from gpupath.engine.base import PathEngine
+from gpupath.engine.prepared import NativeCpuPreparedGraph
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult, SsspResult
 
@@ -40,12 +41,18 @@ class NativeCpuPathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            native_result = _native.bfs_unweighted(
-                graph.num_vertices,
-                graph.indptr,
-                graph.indices,
-                source,
-            )
+            if isinstance(graph, NativeCpuPreparedGraph):
+                native_result = _native.bfs_unweighted(
+                    graph.native_graph,
+                    source,
+                )
+            else:
+                native_result = _native.bfs_unweighted(
+                    graph.num_vertices,
+                    graph.indptr,
+                    graph.indices,
+                    source,
+                )
         except IndexError as exc:
             # Preserve Python engine contract parity for invalid source.
             raise ValueError(f"source {source} out of range") from exc
@@ -78,13 +85,19 @@ class NativeCpuPathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            native_result = _native.sssp(
-                graph.num_vertices,
-                graph.indptr,
-                graph.indices,
-                graph.weights,
-                source,
-            )
+            if isinstance(graph, NativeCpuPreparedGraph):
+                native_result = _native.sssp(
+                    graph.native_graph,
+                    source,
+                )
+            else:
+                native_result = _native.sssp(
+                    graph.num_vertices,
+                    graph.indptr,
+                    graph.indices,
+                    graph.weights,
+                    source,
+                )
         except IndexError as exc:
             raise ValueError(f"source {source} out of range") from exc
 
@@ -92,3 +105,16 @@ class NativeCpuPathEngine(PathEngine):
             distances=list(native_result.distances),
             predecessors=list(native_result.predecessors),
         )
+
+    @staticmethod
+    def prepare_graph(graph: CSRGraph) -> NativeCpuPreparedGraph:
+        """Prepare a Python CSR graph for repeated native CPU traversals.
+
+        Args:
+            graph: Graph to prepare.
+
+        Returns:
+            A prepared native graph wrapper that can be reused across repeated
+            BFS and SSSP queries.
+        """
+        return NativeCpuPreparedGraph.from_csr_graph(graph)
