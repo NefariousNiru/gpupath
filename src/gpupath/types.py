@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import List, NewType
 
 VertexId = NewType("VertexId", int)
@@ -53,3 +54,29 @@ class SsspResult:
 
     distances: List[float]
     predecessors: List[int]
+
+
+class Device(Enum):
+    """Execution device for native implementations.
+
+    Attributes:
+        AUTO:
+            Automatically selects CUDA if a compatible GPU is available,
+            otherwise falls back to CPU.
+
+        CUDA:
+            Forces execution on a CUDA-enabled GPU.
+
+        CPU:
+            Forces execution on the CPU.
+
+        REFERENCE:
+            Pure Python implementation. This version is significantly slower,
+            but is useful as a simple and accurate baseline for testing,
+            debugging, and validating correctness.
+    """
+
+    AUTO = "auto"
+    CUDA = "cuda"
+    CPU = "cpu"
+    REFERENCE = "reference"

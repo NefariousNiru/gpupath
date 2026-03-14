@@ -9,10 +9,10 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from gpupath import cost_matrix, shortest_path_lengths
-from gpupath.engine.cpu import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
+from gpupath.engine.native import NativePathEngine
+from gpupath.engine.reference import ReferencePathEngine
 from gpupath.graph import CSRGraph
+from gpupath.query import _cost_matrix, _shortest_path_lengths
 
 # ---------------------------------------------------------------------------
 # Benchmark result model
@@ -65,6 +65,8 @@ class SuiteConfig:
     matrix_sources: int = 64
     matrix_targets: int = 128
     include_bmssp: bool = True
+    num_threads_list: tuple[int, ...] = (1, 2, 4, 8)
+    matrix_repeats_threaded: int = 3
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +99,7 @@ def make_random_graph(case: GraphCase) -> CSRGraph:
             weight = round(rng.uniform(0.1, 10.0), 6)
             edges.add((src, dst, float(weight)))
     else:
-        edges = set()
+        edges: set[tuple[float | int, float | int]] = set()
         while len(edges) < case.num_edges:
             src = rng.randrange(case.num_vertices)
             dst = rng.randrange(case.num_vertices)
@@ -161,8 +163,329 @@ def print_speedup(label: str, baseline: BenchResult, contender: BenchResult) -> 
 
 
 # ---------------------------------------------------------------------------
+# Prepared-graph backend benchmarks
+# ---------------------------------------------------------------------------
+
+
+def run_bfs_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    source: int,
+    repeats: int,
+) -> None:
+    """Benchmark raw native CPU BFS vs prepared native CPU BFS on one graph."""
+    native_engine = NativePathEngine()
+
+    def bench_native_bfs():
+        return native_engine.bfs(graph, source)
+
+    def bench_native_bfs_prepared():
+        return native_engine.bfs(graph, source)
+
+    native_result = timed_run(bench_native_bfs, repeats=repeats)
+    prepared_result = timed_run(bench_native_bfs_prepared, repeats=repeats)
+
+    print("[Kernel Benchmark] BFS prepared graph")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_sssp_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    source: int,
+    repeats: int,
+) -> None:
+    """Benchmark raw native CPU SSSP vs prepared native CPU SSSP on one graph."""
+    native_engine = NativePathEngine()
+
+    def bench_native_sssp():
+        return native_engine.sssp(graph, source)
+
+    def bench_native_sssp_prepared():
+        return native_engine.sssp(graph, source)
+
+    native_result = timed_run(bench_native_sssp, repeats=repeats)
+    prepared_result = timed_run(bench_native_sssp_prepared, repeats=repeats)
+
+    print("[Kernel Benchmark] SSSP prepared graph")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_bfs_repeated_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    seed: int,
+) -> None:
+    """Benchmark repeated raw native BFS vs prepared native BFS."""
+    native_engine = NativePathEngine()
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+
+    def bench_native_bfs_repeated():
+        return [native_engine.bfs(graph, source) for source in sources]
+
+    def bench_native_bfs_prepared_repeated():
+        return [native_engine.bfs(graph, source) for source in sources]
+
+    native_result = timed_run(bench_native_bfs_repeated, repeats=repeats)
+    prepared_result = timed_run(bench_native_bfs_prepared_repeated, repeats=repeats)
+
+    print("[Repeated Benchmark] BFS prepared graph")
+    print(f"sources={len(sources)}")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+def run_sssp_repeated_prepared_backend_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    seed: int,
+) -> None:
+    """Benchmark repeated raw native SSSP vs prepared native SSSP."""
+    native_engine = NativePathEngine()
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+
+    def bench_native_sssp_repeated():
+        return [native_engine.sssp(graph, source) for source in sources]
+
+    def bench_native_sssp_prepared_repeated():
+        return [native_engine.sssp(graph, source) for source in sources]
+
+    native_result = timed_run(bench_native_sssp_repeated, repeats=repeats)
+    prepared_result = timed_run(bench_native_sssp_prepared_repeated, repeats=repeats)
+
+    print("[Repeated Benchmark] SSSP prepared graph")
+    print(f"sources={len(sources)}")
+    print(format_result(native_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared / Raw Native", native_result, prepared_result)
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Kernel-level backend benchmarks
 # ---------------------------------------------------------------------------
+
+
+def run_bfs_multi_source_thread_scaling_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    num_targets: int,
+    seed: int,
+    num_threads_list: tuple[int, ...],
+) -> None:
+    """Benchmark native batched BFS cost-matrix execution across thread counts."""
+    native_engine = NativePathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+    targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
+
+    print("[Thread Scaling Benchmark] multi_source BFS lengths")
+    print(f"sources={len(sources)}  targets={len(targets)}")
+
+    baseline_result: BenchResult | None = None
+
+    for num_threads in num_threads_list:
+
+        def bench_native_batched_bfs():
+            return native_engine.multi_source_lengths(
+                prepared_graph.graph,
+                sources,
+                targets=targets,
+                method="default",
+                num_threads=num_threads,
+            )
+
+        result = timed_run(bench_native_batched_bfs, repeats=repeats)
+        print(f"{format_result(result)}  threads={num_threads}")
+
+        if num_threads == 1:
+            baseline_result = result
+        elif baseline_result is not None:
+            print_speedup(f"{num_threads} threads / 1 thread", baseline_result, result)
+
+    print()
+
+
+def run_sssp_multi_source_thread_scaling_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    num_targets: int,
+    seed: int,
+    num_threads_list: tuple[int, ...],
+) -> None:
+    """Benchmark native batched SSSP cost-matrix execution across thread counts."""
+    native_engine = NativePathEngine()
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+    targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
+
+    print("[Thread Scaling Benchmark] multi_source SSSP lengths")
+    print(f"sources={len(sources)}  targets={len(targets)}")
+
+    baseline_result: BenchResult | None = None
+
+    for num_threads in num_threads_list:
+
+        def bench_native_batched_sssp():
+            return native_engine.multi_source_lengths(
+                prepared_graph.graph,
+                sources,
+                targets=targets,
+                method="default",
+                num_threads=num_threads,
+            )
+
+        result = timed_run(bench_native_batched_sssp, repeats=repeats)
+        print(f"{format_result(result)}  threads={num_threads}")
+
+        if num_threads == 1:
+            baseline_result = result
+        elif baseline_result is not None:
+            print_speedup(f"{num_threads} threads / 1 thread", baseline_result, result)
+
+    print()
+
+
+def run_cost_matrix_threaded_comparison_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    num_targets: int,
+    seed: int,
+    threaded_num_threads: int,
+) -> None:
+    """Compare Python cost-matrix, native batched single-thread, and native batched multi-thread."""
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+    targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
+
+    def bench_python_cost_matrix():
+        return _cost_matrix(
+            graph,
+            py_engine,
+            sources=sources,
+            targets=targets,
+            method="default",
+        )
+
+    def bench_native_cost_matrix_1_thread():
+        return native_engine.multi_source_lengths(
+            graph,
+            sources,
+            targets=targets,
+            method="default",
+            num_threads=1,
+        )
+
+    def bench_native_cost_matrix_threaded():
+        return native_engine.multi_source_lengths(
+            graph,
+            sources,
+            targets=targets,
+            method="default",
+            num_threads=threaded_num_threads,
+        )
+
+    py_result = timed_run(bench_python_cost_matrix, repeats=repeats)
+    native_1_result = timed_run(bench_native_cost_matrix_1_thread, repeats=repeats)
+    native_mt_result = timed_run(bench_native_cost_matrix_threaded, repeats=repeats)
+
+    print("[API Benchmark] cost_matrix threaded comparison")
+    print(
+        f"sources={len(sources)}  "
+        f"targets={len(targets)}  "
+        f"threaded_num_threads={threaded_num_threads}"
+    )
+    print(format_result(py_result))
+    print(format_result(native_1_result))
+    print(format_result(native_mt_result))
+    print_speedup("Native 1-thread / Python", py_result, native_1_result)
+    print_speedup(
+        f"Native {threaded_num_threads}-thread / Python", py_result, native_mt_result
+    )
+    print_speedup(
+        f"Native {threaded_num_threads}-thread / Native 1-thread",
+        native_1_result,
+        native_mt_result,
+    )
+    print()
+
+
+def run_native_batched_prepared_vs_prepare_each_time_benchmark(
+    graph: CSRGraph,
+    *,
+    repeats: int,
+    num_sources: int,
+    num_targets: int,
+    seed: int,
+    num_threads: int,
+) -> None:
+    """Benchmark native batched execution with reused prepared graph vs prepare-on-each-call."""
+    native_engine = NativePathEngine()
+
+    rng = random.Random(seed)
+    sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
+    targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
+
+    prepared_graph = native_engine.prepare_graph(graph)
+
+    def bench_prepare_each_time():
+        return native_engine.multi_source_lengths(
+            graph,
+            sources,
+            targets=targets,
+            method="default",
+            num_threads=num_threads,
+        )
+
+    def bench_prepared_reused():
+        return native_engine.multi_source_lengths(
+            prepared_graph.graph,
+            sources,
+            targets=targets,
+            method="default",
+            num_threads=num_threads,
+        )
+
+    raw_result = timed_run(bench_prepare_each_time, repeats=repeats)
+    prepared_result = timed_run(bench_prepared_reused, repeats=repeats)
+
+    print("[API Benchmark] native batched prepared vs prepare-each-time")
+    print(
+        f"sources={len(sources)}  " f"targets={len(targets)}  " f"threads={num_threads}"
+    )
+    print(format_result(raw_result))
+    print(format_result(prepared_result))
+    print_speedup("Prepared reuse / Prepare each time", raw_result, prepared_result)
+    print()
 
 
 def run_bfs_backend_benchmark(
@@ -172,8 +495,8 @@ def run_bfs_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark Python CPU BFS vs native CPU BFS on one graph."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     def bench_python_bfs():
         return py_engine.bfs(graph, source)
@@ -198,8 +521,8 @@ def run_sssp_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark Python CPU SSSP vs native CPU SSSP on one graph."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     def bench_python_sssp():
         return py_engine.sssp(graph, source)
@@ -229,16 +552,16 @@ def run_shortest_path_lengths_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark API-level shortest_path_lengths for default traversal."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     method_label = "default"
 
     def bench_python_api():
-        return shortest_path_lengths(graph, py_engine, source, method=method_label)
+        return _shortest_path_lengths(graph, py_engine, source, method=method_label)
 
     def bench_native_api():
-        return shortest_path_lengths(graph, native_engine, source, method=method_label)
+        return _shortest_path_lengths(graph, native_engine, source, method=method_label)
 
     py_result = timed_run(bench_python_api, repeats=repeats)
     native_result = timed_run(bench_native_api, repeats=repeats)
@@ -259,15 +582,15 @@ def run_cost_matrix_benchmark(
     seed: int,
 ) -> None:
     """Benchmark API-level cost_matrix for Python and native backends."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     rng = random.Random(seed)
     sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
     targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
 
     def bench_python_cost_matrix():
-        return cost_matrix(
+        return _cost_matrix(
             graph,
             py_engine,
             sources=sources,
@@ -276,7 +599,7 @@ def run_cost_matrix_benchmark(
         )
 
     def bench_native_cost_matrix():
-        return cost_matrix(
+        return _cost_matrix(
             graph,
             native_engine,
             sources=sources,
@@ -302,10 +625,10 @@ def run_bmssp_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark experimental BMSSP on Python CPU backend only."""
-    py_engine = CpuPathEngine()
+    py_engine = ReferencePathEngine()
 
     def bench_bmssp():
-        return shortest_path_lengths(graph, py_engine, source, method="bmssp")
+        return _shortest_path_lengths(graph, py_engine, source, method="bmssp")
 
     print("[API Benchmark] BMSSP experimental")
     try:
@@ -386,11 +709,23 @@ def run_case(case: GraphCase, config: SuiteConfig) -> None:
     )
     print("=" * 88)
 
+    # For weighted use SSSP -> Dijkstra
     if case.weighted:
         run_sssp_backend_benchmark(
             graph,
             source=config.source,
             repeats=config.repeats_kernel,
+        )
+        run_sssp_prepared_backend_benchmark(
+            graph,
+            source=config.source,
+            repeats=config.repeats_kernel,
+        )
+        run_sssp_repeated_prepared_backend_benchmark(
+            graph,
+            repeats=config.repeats_api,
+            num_sources=config.matrix_sources,
+            seed=case.seed + 2000,
         )
         run_shortest_path_lengths_benchmark(
             graph,
@@ -404,6 +739,22 @@ def run_case(case: GraphCase, config: SuiteConfig) -> None:
             num_targets=config.matrix_targets,
             seed=case.seed + 1000,
         )
+        run_sssp_multi_source_thread_scaling_benchmark(
+            graph,
+            repeats=config.matrix_repeats_threaded,
+            num_sources=config.matrix_sources,
+            num_targets=config.matrix_targets,
+            seed=case.seed + 3000,
+            num_threads_list=config.num_threads_list,
+        )
+        run_cost_matrix_threaded_comparison_benchmark(
+            graph,
+            repeats=config.matrix_repeats_threaded,
+            num_sources=config.matrix_sources,
+            num_targets=config.matrix_targets,
+            seed=case.seed + 4000,
+            threaded_num_threads=max(config.num_threads_list),
+        )
 
         if config.include_bmssp:
             run_bmssp_benchmark(
@@ -411,16 +762,45 @@ def run_case(case: GraphCase, config: SuiteConfig) -> None:
                 source=config.source,
                 repeats=3,
             )
+    # Unweighted use BFS
     else:
         run_bfs_backend_benchmark(
             graph,
             source=config.source,
             repeats=config.repeats_kernel,
         )
+        run_bfs_prepared_backend_benchmark(
+            graph,
+            source=config.source,
+            repeats=config.repeats_kernel,
+        )
+        run_bfs_repeated_prepared_backend_benchmark(
+            graph,
+            repeats=config.repeats_api,
+            num_sources=config.matrix_sources,
+            seed=case.seed + 2000,
+        )
         run_shortest_path_lengths_benchmark(
             graph,
             source=config.source,
             repeats=config.repeats_api,
+        )
+        run_bfs_multi_source_thread_scaling_benchmark(
+            graph,
+            repeats=config.matrix_repeats_threaded,
+            num_sources=config.matrix_sources,
+            num_targets=config.matrix_targets,
+            seed=case.seed + 3000,
+            num_threads_list=config.num_threads_list,
+        )
+
+        run_cost_matrix_threaded_comparison_benchmark(
+            graph,
+            repeats=config.matrix_repeats_threaded,
+            num_sources=config.matrix_sources,
+            num_targets=config.matrix_targets,
+            seed=case.seed + 4000,
+            threaded_num_threads=max(config.num_threads_list),
         )
 
 

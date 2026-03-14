@@ -1,5 +1,6 @@
 // file: cpp/src/sssp.cpp
 
+#include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
 
 #include <functional>
@@ -12,131 +13,68 @@
 
 namespace gpupath {
     /**
-     * @brief Run Single-Source Shortest Path (SSSP) from @p source on a CSR graph.
+     * @brief Run single-source shortest path on a prepared CSR graph.
      *
-     * Validates the CSR structure and optional weight array before traversal,
-     * then runs Dijkstra's algorithm using a binary min-heap. Neighbor indices
-     * are bounds-checked during traversal to catch malformed graphs early.
+     * Executes Dijkstra-style single-source shortest path directly on a prepared
+     * @ref NativeCsrGraph. Because the graph has already been validated at
+     * construction time, this function can traverse native CSR storage directly
+     * without repeating Python-boundary CSR or weight validation work on every
+     * call.
      *
-     * If @p weights is not provided, each edge is assigned a unit cost of `1.0`.
+     * If the graph stores explicit edge weights, those weights are used. Otherwise,
+     * every edge is treated as having implicit unit cost `1.0`.
      *
-     * @param num_vertices  Total number of vertices. Must be non-negative.
-     * @param indptr        Row-pointer array of length `num_vertices + 1`.
-     *                      Must be non-decreasing, start at `0`, and have
-     *                      its last element equal to `indices.size()`.
-     * @param indices       Flat neighbor array. Every entry must be in
-     *                      `[0, num_vertices)`.
-     * @param weights       Optional per-edge weights parallel to @p indices.
-     *                      If provided, all values must be non-negative.
-     * @param source        Source vertex. Must be in `[0, num_vertices)`.
+     * This function preserves the project SSSP contract:
+     * - `distances[v]` is the minimum path cost from @p source to @p v
+     * - `predecessors[v]` is the predecessor on a valid shortest path
+     * - unreachable vertices retain `+inf` in `distances` and `-1` in
+     *   `predecessors`
+     * - the source retains predecessor `-1`
      *
-     * @return An `SsspResult` whose `distances[v]` holds the minimum path cost
-     *         from @p source to vertex @p v, and whose `predecessors[v]` holds
-     *         the vertex that last relaxed the edge into @p v. Unreachable
-     *         vertices retain `+inf` in `distances` and `-1` in `predecessors`.
+     * @param graph Prepared native CSR graph.
+     * @param source Source vertex in the range `[0, graph.num_vertices())`.
      *
-     * @throws std::invalid_argument if @p num_vertices is negative, if
-     *         @p indptr has the wrong size, is not non-decreasing, does not
-     *         start at `0`, if its last element does not equal `indices.size()`,
-     *         if @p weights has the wrong size, or if any weight is negative.
-     * @throws std::out_of_range if @p source is outside `[0, num_vertices)`
-     *         or if any neighbor index encountered during traversal is
-     *         outside `[0, num_vertices)`.
+     * @return An @ref SsspResult containing shortest-path distances and
+     *         predecessors for all vertices in the graph.
+     *
+     * @throws std::out_of_range If @p source is outside the valid vertex range.
      */
-    SsspResult sssp(
-        const int num_vertices,
-        const std::vector<int> &indptr,
-        const std::vector<int> &indices,
-        const std::optional<std::vector<double> > &weights,
-        int source
-    ) {
-        // --- CSR validation --------------------------------------------------
-
-        if (num_vertices < 0) {
-            throw std::invalid_argument("num_vertices must be non-negative");
-        }
-
-        if (source < 0 || source >= num_vertices) {
+    SsspResult sssp(const NativeCsrGraph &graph, const int source) {
+        if (source < 0 || static_cast<std::size_t>(source) >= graph.num_vertices()) {
             throw std::out_of_range("source out of range");
         }
 
-        if (static_cast<int>(indptr.size()) != num_vertices + 1) {
-            throw std::invalid_argument("indptr size must equal num_vertices + 1");
-        }
-
-        if (indptr.empty()) {
-            throw std::invalid_argument("indptr must not be empty");
-        }
-
-        if (indptr.front() != 0) {
-            throw std::invalid_argument("indptr must start at 0");
-        }
-
-        if (indptr.back() != static_cast<int>(indices.size())) {
-            throw std::invalid_argument("indptr last value must equal indices size");
-        }
-
-        for (int i = 0; i < num_vertices; ++i) {
-            if (indptr[i] > indptr[i + 1]) {
-                throw std::invalid_argument("indptr must be non-decreasing");
-            }
-        }
-
-        if (weights.has_value()) {
-            if (weights->size() != indices.size()) {
-                throw std::invalid_argument("weights size must equal indices size");
-            }
-
-            for (std::size_t i = 0; i < weights->size(); ++i) {
-                if ((*weights)[i] < 0.0) {
-                    throw std::invalid_argument("weights must be non-negative");
-                }
-            }
-        }
-
-        // --- Dijkstra / SSSP -------------------------------------------------
-
         SsspResult result;
         result.distances.assign(
-            num_vertices,
+            graph.num_vertices(),
             std::numeric_limits<double>::infinity()
         );
-        result.predecessors.assign(num_vertices, -1);
+        result.predecessors.assign(graph.num_vertices(), -1);
 
         using HeapEntry = std::pair<double, int>;
         std::priority_queue<
             HeapEntry,
             std::vector<HeapEntry>,
-            std::greater<HeapEntry>
+            std::greater<>
         > heap;
 
         result.distances[source] = 0.0;
         heap.emplace(0.0, source);
 
+        const bool has_weights = graph.weights().has_value();
+
         while (!heap.empty()) {
             const auto [cur_dist, u] = heap.top();
             heap.pop();
 
-            // Skip stale heap entries. This is the standard lazy-deletion
-            // pattern used instead of a decrease-key operation.
             if (cur_dist > result.distances[u]) {
                 continue;
             }
 
-            for (int edge_idx = indptr[u]; edge_idx < indptr[u + 1]; ++edge_idx) {
-                const int v = indices[edge_idx];
+            for (int edge_idx = graph.indptr()[u]; edge_idx < graph.indptr()[u + 1]; ++edge_idx) {
+                const int v = graph.indices()[edge_idx];
+                const double weight = has_weights ? (*graph.weights())[edge_idx] : 1.0;
 
-                // Bounds-check each neighbor to catch malformed index arrays.
-                if (v < 0 || v >= num_vertices) {
-                    throw std::out_of_range("neighbor index out of range");
-                }
-
-                const double weight = weights.has_value()
-                                          ? (*weights)[edge_idx]
-                                          : 1.0;
-
-                // Strict improvement preserves deterministic predecessor updates
-                // under a fixed adjacency iteration order.
                 if (const double cand = cur_dist + weight; cand < result.distances[v]) {
                     result.distances[v] = cand;
                     result.predecessors[v] = u;

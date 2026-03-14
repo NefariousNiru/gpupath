@@ -1,5 +1,6 @@
-#pragma once
 // file: cpp/include/gpupath/types.hpp
+
+#pragma once
 
 #include <vector>
 

@@ -39,6 +39,55 @@ class CSRGraph:
     weights: list[float] | None = None
     directed: bool = True
 
+    def __post_init__(self) -> None:
+        """Validate CSR graph invariants after construction."""
+        self._validate()
+
+    def _validate(self) -> None:
+        """Validate the internal CSR representation.
+
+        Raises:
+            ValueError: If the CSR structure is malformed, indices are out of
+                range, or weights are invalid.
+        """
+        if self.num_vertices < 0:
+            raise ValueError("num_vertices must be non-negative")
+
+        if len(self.indptr) != self.num_vertices + 1:
+            raise ValueError("indptr must have length num_vertices + 1")
+
+        if not self.indptr:
+            raise ValueError("indptr must not be empty")
+
+        if self.indptr[0] != 0:
+            raise ValueError("indptr[0] must be 0")
+
+        if self.indptr[-1] != len(self.indices):
+            raise ValueError("indptr[-1] must equal len(indices)")
+
+        prev = 0
+        for i, value in enumerate(self.indptr):
+            if value < prev:
+                raise ValueError(
+                    f"indptr must be non-decreasing; bad value at index {i}"
+                )
+            prev = value
+
+        for i, dst in enumerate(self.indices):
+            if dst < 0 or dst >= self.num_vertices:
+                raise ValueError(
+                    f"indices[{i}]={dst} out of range for {self.num_vertices} vertices"
+                )
+
+        if self.weights is not None:
+            if len(self.weights) != len(self.indices):
+                raise ValueError("weights must have the same length as indices")
+            for i, w in enumerate(self.weights):
+                if w < 0:
+                    raise ValueError(
+                        f"weights[{i}]={w} is negative; only non-negative weights are supported"
+                    )
+
     @classmethod
     def from_csr(
         cls,
@@ -79,36 +128,6 @@ class CSRGraph:
             raise ValueError("indptr must not be empty")
 
         num_vertices = len(indptr_list) - 1
-
-        if num_vertices < 0:
-            raise ValueError("indptr must contain at least one element")
-        if indptr_list[0] != 0:
-            raise ValueError("indptr[0] must be 0")
-        if indptr_list[-1] != len(indices_list):
-            raise ValueError("indptr[-1] must equal len(indices)")
-
-        prev = 0
-        for i, value in enumerate(indptr_list):
-            if value < prev:
-                raise ValueError(
-                    f"indptr must be non-decreasing; bad value at index {i}"
-                )
-            prev = value
-
-        for i, dst in enumerate(indices_list):
-            if dst < 0 or dst >= num_vertices:
-                raise ValueError(
-                    f"indices[{i}]={dst} out of range for {num_vertices} vertices"
-                )
-
-        if weights_list is not None:
-            if len(weights_list) != len(indices_list):
-                raise ValueError("weights must have the same length as indices")
-            for i, w in enumerate(weights_list):
-                if w < 0:
-                    raise ValueError(
-                        f"weights[{i}]={w} is negative; only non-negative weights are supported"
-                    )
 
         return cls(
             num_vertices=num_vertices,

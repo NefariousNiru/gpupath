@@ -4,135 +4,154 @@ from __future__ import annotations
 
 from typing import Literal, Sequence
 
+from gpupath import _utils
 from gpupath.engine.base import PathEngine
 from gpupath.graph import CSRGraph
 from gpupath.types import (
     INF_FLOAT,
     NO_PREDECESSOR,
     UNREACHABLE_DISTANCE,
-    BfsResult,
-    SsspResult,
+    Device,
 )
 
-
-def _resolve(
-    graph: CSRGraph,
-    engine: PathEngine,
-    source: int,
-    method: Literal["bmssp", "default"] = "default",
-) -> SsspResult | BfsResult:
-    """Select and run the appropriate traversal algorithm.
-
-    For weighted graphs, dispatches to :meth:`~PathEngine.bmssp` when
-    *method* is ``"bmssp"``, otherwise to :meth:`~PathEngine.sssp`.
-    For unweighted graphs, always dispatches to :meth:`~PathEngine.bfs`
-    regardless of *method*.
-
-    Args:
-        graph: The graph to traverse.
-        engine: The backend engine to use.
-        source: The source vertex id.
-        method: ``"bmssp"`` to use the BMSSP algorithm on weighted graphs,
-            ``"default"`` to use Dijkstra. Ignored for unweighted graphs.
-
-    Returns:
-        A :class:`~gpupath.types.BfsResult` or
-        :class:`~gpupath.types.SsspResult` depending on the graph and method.
-    """
-    if not graph.is_weighted:
-        return engine.bfs(graph, source)
-    if method == "bmssp":
-        raise NotImplementedError(
-            "bmssp is experimental; not yet implemented correctly"
-        )
-        # return engine.bmssp(graph, source)
-    return engine.sssp(graph, source)
-
-
-def _validate_vertices(graph: CSRGraph, vertices: Sequence[int]) -> None:
-    """Helper function to validate vertices."""
-    for target in vertices:
-        if target < 0 or target >= graph.num_vertices:
-            raise ValueError(f"target {target} out of range")
+# =========================================
+# Public API
+# =========================================
 
 
 def shortest_path_lengths(
     graph: CSRGraph,
-    engine: PathEngine,
     source: int,
+    device: Device = Device.AUTO,
     method: Literal["bmssp", "default"] = "default",
     targets: Sequence[int] | None = None,
 ) -> list[int] | list[float]:
-    """Return the shortest distance from *source* to every vertex.
+    """Compute shortest path distances from a source vertex.
 
-    Automatically selects BFS for unweighted graphs and SSSP for weighted
-    ones. On weighted graphs, pass ``method="bmssp"`` to use the
-    deterministic ``O(m log^(2/3) n)`` BMSSP algorithm instead of
-    Dijkstra. (Currently in development)
+    Automatically selects the appropriate traversal algorithm based on the
+    graph type:
+
+    - **Unweighted graphs** use breadth-first search (BFS).
+    - **Weighted graphs** use single-source shortest path (SSSP) with
+      Dijkstra by default.
+
+    When ``method="bmssp"`` is specified on weighted graphs, the BMSSP
+    algorithm is used instead of Dijkstra (currently experimental).
+
+    The execution backend is selected using the ``device`` parameter.
 
     Args:
-        graph: The graph to query, stored in CSR format.
-        engine: The backend engine used to run the traversal.
-        source: The source vertex. Must be a valid vertex id in
+        graph:
+            The graph to query, stored in CSR format.
+
+        source:
+            The source vertex. Must be a valid vertex id in
             ``[0, graph.num_vertices)``.
-        method: SSSP algorithm to use on weighted graphs. Either
-            ``"default"`` (Dijkstra) or ``"bmssp"``. Ignored for
-            unweighted graphs.
-        targets: Optional sequence of destination vertex ids to extract from
-                the computed distance array. If ``None``, returns distances to all
-                vertices. If provided, returns distances only for those vertices,
-                in the same order.
+
+        device:
+            Execution device used for the native implementation.
+
+            - ``Device.AUTO`` selects CUDA if a compatible GPU is available,
+              otherwise CPU on C++.
+            - ``Device.CPU`` forces execution on the CPU on C++.
+            - ``Device.CUDA`` forces execution on a CUDA-enabled GPU on C++.
+            - ``Device.REFERENCE``forces execution on the CPU with Python.
+            The native backend is implemented in C++ for performance.
+
+        method:
+            Algorithm to use for weighted graphs.
+
+            - ``"default"`` — Dijkstra's algorithm
+            - ``"bmssp"`` — BMSSP deterministic parallel algorithm
+              (currently experimental)
+
+            Ignored for unweighted graphs.
+
+        targets:
+            Optional sequence of destination vertex ids to extract from the
+            computed distance array. If ``None``, distances to all vertices
+            are returned. If provided, only the requested vertices are
+            returned in the same order.
 
     Returns:
-        A list of length ``graph.num_vertices`` where index ``v`` holds the
-        shortest distance from *source* to ``v``. Unreachable vertices
-        hold ``UNREACHABLE_DISTANCE`` (unweighted) or ``INF_FLOAT``
-        (weighted).
+        list[int] | list[float]:
+            A list of shortest path distances.
+
+            If ``targets`` is ``None``, the returned list has length
+            ``graph.num_vertices`` where index ``v`` stores the distance from
+            ``source`` to vertex ``v``.
+
+            If ``targets`` is provided, the returned list contains only the
+            distances for those vertices.
+
+            Unreachable vertices contain ``UNREACHABLE_DISTANCE`` for
+            unweighted graphs or ``INF_FLOAT`` for weighted graphs.
     """
-    result = _resolve(graph, engine, source, method)
-
-    if targets is None:
-        return result.distances
-
-    _validate_vertices(graph, targets)
-    return [result.distances[t] for t in targets]
+    engine = _utils._resolve_engine(device=device)
+    return _shortest_path_lengths(graph, engine, source, method=method, targets=targets)
 
 
 def predecessors(
     graph: CSRGraph,
-    engine: PathEngine,
     source: int,
+    device: Device = Device.AUTO,
     method: Literal["bmssp", "default"] = "default",
 ) -> list[int]:
-    """Return the predecessor of every vertex along the shortest path from *source*.
+    """Compute the predecessor of each vertex on the shortest path from a source.
 
-    Automatically selects BFS for unweighted graphs and SSSP for weighted
-    ones. On weighted graphs, pass ``method="bmssp"`` to use the
-    deterministic ``O(m log^(2/3) n)`` BMSSP algorithm instead of
-    Dijkstra.
+    For unweighted graphs, breadth-first search (BFS) is used. For weighted
+    graphs, single-source shortest path (SSSP) with Dijkstra is used by
+    default.
+
+    When ``method="bmssp"`` is specified on weighted graphs, the BMSSP
+    algorithm is used instead of Dijkstra (currently experimental).
+
+    The execution backend is selected using the ``device`` parameter.
 
     Args:
-        graph: The graph to query, stored in CSR format.
-        engine: The backend engine used to run the traversal.
-        source: The source vertex. Must be a valid vertex id in
+        graph:
+            The graph to query, stored in CSR format.
+
+        source:
+            The source vertex. Must be a valid vertex id in
             ``[0, graph.num_vertices)``.
-        method: SSSP algorithm to use on weighted graphs. Either
-            ``"default"`` (Dijkstra) or ``"bmssp"``. Ignored for
-            unweighted graphs.
+
+        device:
+            Execution device used for the native implementation.
+
+            - ``Device.AUTO`` selects CUDA if a compatible GPU is available,
+              otherwise CPU on C++.
+            - ``Device.CPU`` forces execution on the CPU on C++.
+            - ``Device.CUDA`` forces execution on a CUDA-enabled GPU on C++.
+            - ``Device.REFERENCE``forces execution on the CPU with Python.
+            The native backend is implemented in C++ for performance.
+
+        method:
+            Algorithm to use for weighted graphs.
+
+            - ``"default"`` — Dijkstra's algorithm
+            - ``"bmssp"`` — BMSSP deterministic parallel algorithm
+              (currently experimental)
+
+            Ignored for unweighted graphs.
 
     Returns:
-        A list of length ``graph.num_vertices`` where index ``v`` holds the
-        predecessor of ``v`` along the shortest path from *source*, or
-        ``NO_PREDECESSOR`` if ``v`` is the source itself or is unreachable.
+        list[int]:
+            A list of length ``graph.num_vertices`` where index ``v`` holds
+            the predecessor of ``v`` along the shortest path from ``source``.
+
+            Vertices that are unreachable or the source vertex itself have
+            value ``NO_PREDECESSOR``.
     """
-    return _resolve(graph, engine, source, method).predecessors
+    engine = _utils._resolve_engine(device=device)
+    return _predecessors(graph, engine, source, method)
 
 
 def shortest_path(
     graph: CSRGraph,
-    engine: PathEngine,
     source: int,
     target: int,
+    device: Device = Device.AUTO,
     method: Literal["bmssp", "default"] = "default",
 ) -> list[int]:
     """Return the shortest path from *source* to *target* as an ordered list.
@@ -144,7 +163,16 @@ def shortest_path(
 
     Args:
         graph: The graph to query, stored in CSR format.
-        engine: The backend engine used to run the traversal.
+        device:
+            Execution device used for the native implementation.
+
+            - ``Device.AUTO`` selects CUDA if a compatible GPU is available,
+              otherwise CPU on C++.
+            - ``Device.CPU`` forces execution on the CPU on C++.
+            - ``Device.CUDA`` forces execution on a CUDA-enabled GPU on C++.
+            - ``Device.REFERENCE``forces execution on the CPU with Python.
+            The native backend is implemented in C++ for performance.
+
         source: The starting vertex. Must be a valid vertex id in
             ``[0, graph.num_vertices)``.
         target: The destination vertex. Must be a valid vertex id in
@@ -162,32 +190,15 @@ def shortest_path(
         RuntimeError: If the predecessor chain is inconsistent, indicating
             a bug in the underlying engine implementation.
     """
-    _validate_vertices(graph, [target])
-
-    result = _resolve(graph, engine, source, method)
-
-    sentinel = INF_FLOAT if graph.is_weighted else UNREACHABLE_DISTANCE
-    if result.distances[target] == sentinel:
-        return []
-
-    path: list[int] = []
-    cur = target
-    while cur != source:
-        path.append(cur)
-        cur = result.predecessors[cur]
-        if cur == NO_PREDECESSOR:
-            raise RuntimeError("invalid predecessor chain detected")
-
-    path.append(source)
-    path.reverse()
-    return path
+    engine = _utils._resolve_engine(device=device)
+    return _shortest_path(graph, engine, source, target, method)
 
 
 def cost_matrix(
     graph: CSRGraph,
-    engine: PathEngine,
     sources: Sequence[int],
-    targets: Sequence[int],
+    targets: Sequence[int] | None = None,
+    device: Device = Device.AUTO,
     method: Literal["bmssp", "default"] = "default",
 ) -> list[list[int]] | list[list[float]]:
     """Compute a cost matrix of shortest distances from each source to each target.
@@ -198,7 +209,16 @@ def cost_matrix(
 
     Args:
         graph: The graph to query, stored in CSR format.
-        engine: The backend engine used to run each traversal.
+        device:
+            Execution device used for the native implementation.
+
+            - ``Device.AUTO`` selects CUDA if a compatible GPU is available,
+              otherwise CPU on C++.
+            - ``Device.CPU`` forces execution on the CPU on C++.
+            - ``Device.CUDA`` forces execution on a CUDA-enabled GPU on C++.
+            - ``Device.REFERENCE``forces execution on the CPU with Python.
+            The native backend is implemented in C++ for performance.
+
         sources: Sequence of source vertex ids. Each must be a valid vertex
             id in ``[0, graph.num_vertices)``. Returns an empty list if
             *sources* is empty.
@@ -219,21 +239,149 @@ def cost_matrix(
         ValueError: If any vertex in *sources* or *targets* is outside
             ``[0, graph.num_vertices)``.
     """
+    engine = _utils._resolve_engine(device=device)
+    return _cost_matrix(graph, engine, sources, targets, method)
+
+
+# =========================================
+# Helpers
+# =========================================
+
+
+def _shortest_path_lengths(
+    graph: CSRGraph,
+    engine: PathEngine,
+    source: int,
+    method: Literal["bmssp", "default"] = "default",
+    targets: Sequence[int] | None = None,
+) -> list[int] | list[float]:
+    """Internal helper to compute shortest paths using a specific engine.
+
+    Selects the appropriate traversal algorithm based on graph type and
+    delegates execution to the provided :class:`PathEngine`.
+
+    Args:
+        graph: The graph stored in CSR format.
+        engine: Backend engine used to execute the traversal.
+        source: Source vertex.
+        method: Algorithm selection for weighted graphs.
+        targets: Optional subset of vertices to extract from results.
+
+    Returns:
+        list[int] | list[float]:
+            Distances from the source vertex.
+    """
+    result = _utils._resolve_algorithm(graph, engine, method)(graph, source)
+
+    if targets is None:
+        return result.distances
+
+    _utils._validate_vertices(graph, targets)
+    return [result.distances[t] for t in targets]
+
+
+def _predecessors(
+    graph: CSRGraph,
+    engine: PathEngine,
+    source: int,
+    method: Literal["bmssp", "default"] = "default",
+) -> list[int]:
+    """Internal helper to compute predecessor vertices using a specific engine.
+
+    Selects the appropriate traversal algorithm based on graph type and
+    delegates execution to the provided :class:`PathEngine`.
+
+    Args:
+        graph: The graph stored in CSR format.
+        engine: Backend engine used to execute the traversal.
+        source: Source vertex.
+        method: Algorithm selection for weighted graphs.
+
+    Returns:
+        list[int]:
+            Predecessor of each vertex along the shortest path tree.
+    """
+    return _utils._resolve_algorithm(graph, engine, method)(graph, source).predecessors
+
+
+def _shortest_path(
+    graph: CSRGraph,
+    engine: PathEngine,
+    source: int,
+    target: int,
+    method: Literal["bmssp", "default"] = "default",
+) -> list[int]:
+    """Internal helper to compute a shortest path using a specific engine.
+
+    Selects the appropriate traversal algorithm based on graph type and
+    delegates execution to the provided :class:`PathEngine`. The path is
+    reconstructed by following the predecessor chain from ``target`` back
+    to ``source``.
+
+    Args:
+        graph: The graph stored in CSR format.
+        engine: Backend engine used to execute the traversal.
+        source: Source vertex.
+        target: Destination vertex.
+        method: Algorithm selection for weighted graphs.
+
+    Returns:
+        list[int]:
+            Ordered list of vertex ids from ``source`` to ``target``.
+            Returns an empty list if the target is unreachable.
+    """
+
+    _utils._validate_vertices(graph, [target])
+
+    result = _utils._resolve_algorithm(graph, engine, method)(graph, source)
+
+    sentinel = INF_FLOAT if graph.is_weighted else UNREACHABLE_DISTANCE
+    if result.distances[target] == sentinel:
+        return []
+
+    path: list[int] = []
+    cur = target
+    while cur != source:
+        path.append(cur)
+        cur = result.predecessors[cur]
+        if cur == NO_PREDECESSOR:
+            raise RuntimeError("invalid predecessor chain detected")
+
+    path.append(source)
+    path.reverse()
+    return path
+
+
+def _cost_matrix(
+    graph: CSRGraph,
+    engine: PathEngine,
+    sources: Sequence[int],
+    targets: Sequence[int] | None = None,
+    method: Literal["bmssp", "default"] = "default",
+) -> list[list[int]] | list[list[float]]:
+    """Internal helper to compute a cost matrix using a specific engine.
+
+    Selects the appropriate traversal algorithm based on graph type and
+    delegates execution to the provided :class:`PathEngine`. Runs one BFS
+    (unweighted graphs) or SSSP (weighted graphs) per source vertex and
+    extracts distances to the requested targets.
+
+    Args:
+        graph: The graph stored in CSR format.
+        engine: Backend engine used to execute the traversal.
+        sources: Sequence of source vertex ids.
+        targets: Sequence of target vertex ids.
+        method: Algorithm selection for weighted graphs.
+
+    Returns:
+        list[list[int]] | list[list[float]]:
+            A ``len(sources) × len(targets)`` matrix where ``matrix[i][j]``
+            holds the shortest distance from ``sources[i]`` to ``targets[j]``.
+    """
     if not sources:
         return []
 
-    _validate_vertices(graph, sources)
-    _validate_vertices(graph, targets)
+    _utils._validate_vertices(graph, sources)
+    _utils._validate_vertices(graph, targets)
 
-    matrix: list[list[int]] | list[list[float]] = []
-    for source in sources:
-        row = shortest_path_lengths(
-            graph,
-            engine,
-            source,
-            method=method,
-            targets=targets,
-        )
-        matrix.append(row)
-
-    return matrix
+    return engine.multi_source_lengths(graph, sources, targets, method=method)

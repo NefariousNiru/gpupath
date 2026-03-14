@@ -9,6 +9,11 @@ here and implement :class:`gpupath.engine.base.PathEngine`.
 """
 
 from gpupath.engine.base import PathEngine
-from gpupath.engine.cpu import CpuPathEngine
+from gpupath.engine.native import NativePathEngine
+from gpupath.engine.reference import ReferencePathEngine
 
-__all__ = ["PathEngine", "CpuPathEngine"]
+__all__ = [
+    "PathEngine",
+    "ReferencePathEngine",
+    "NativePathEngine",
+]

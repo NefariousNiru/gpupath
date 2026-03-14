@@ -6,7 +6,9 @@ import heapq
 import random
 from collections import deque
 
-from gpupath import CpuPathEngine, CSRGraph, shortest_path_lengths
+from gpupath import CSRGraph
+from gpupath.engine import ReferencePathEngine
+from gpupath.query import _shortest_path_lengths
 
 
 def _random_unweighted_graph(
@@ -72,24 +74,24 @@ def _reference_dijkstra(graph: CSRGraph, source: int) -> list[float]:
 
 
 def test_randomized_bfs_parity() -> None:
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
     for seed in range(20):
         graph = _random_unweighted_graph(num_vertices=12, edge_prob=0.18, seed=seed)
         for source in range(graph.num_vertices):
-            got = shortest_path_lengths(graph, engine, source)
+            got = _shortest_path_lengths(graph, engine, source)
             want = _reference_bfs(graph, source)
             assert got == want
 
 
 def test_randomized_weighted_sssp_parity() -> None:
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
     for seed in range(20):
         graph = _random_weighted_graph(
             num_vertices=12, edge_prob=0.18, seed=1000 + seed
         )
         for source in range(graph.num_vertices):
-            got = shortest_path_lengths(graph, engine, source, method="default")
+            got = _shortest_path_lengths(graph, engine, source, method="default")
             want = _reference_dijkstra(graph, source)
             assert got == want

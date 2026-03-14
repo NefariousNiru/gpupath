@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 
-from gpupath import CpuPathEngine, CSRGraph, shortest_path, shortest_path_lengths
+from gpupath import CSRGraph
+from gpupath.engine import ReferencePathEngine
+from gpupath.query import _shortest_path, _shortest_path_lengths
 
 
 def _edge_set_unweighted(graph: CSRGraph) -> set[tuple[int, int]]:
@@ -34,12 +36,12 @@ def test_unweighted_shortest_path_invariants() -> None:
             (4, 5),
         ],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
     source = 0
     target = 5
 
-    path = shortest_path(graph, engine, source, target)
-    distances = shortest_path_lengths(graph, engine, source)
+    path = _shortest_path(graph, engine, source, target)
+    distances = _shortest_path_lengths(graph, engine, source)
     edge_set = _edge_set_unweighted(graph)
 
     assert path[0] == source
@@ -63,12 +65,12 @@ def test_weighted_shortest_path_invariants() -> None:
             (3, 4, 3.0),
         ],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
     source = 0
     target = 4
 
-    path = shortest_path(graph, engine, source, target)
-    distances = shortest_path_lengths(graph, engine, source)
+    path = _shortest_path(graph, engine, source, target)
+    distances = _shortest_path_lengths(graph, engine, source)
     edge_weights = _edge_weight_map(graph)
 
     assert path[0] == source
@@ -87,10 +89,10 @@ def test_unreachable_path_is_empty_and_distance_is_sentinel() -> None:
         num_vertices=4,
         edges=[(0, 1), (2, 3)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    path = shortest_path(graph, engine, 0, 3)
-    distances = shortest_path_lengths(graph, engine, 0)
+    path = _shortest_path(graph, engine, 0, 3)
+    distances = _shortest_path_lengths(graph, engine, 0)
 
     assert path == []
     assert distances[3] == -1
@@ -101,10 +103,10 @@ def test_unreachable_weighted_path_is_empty_and_distance_is_inf() -> None:
         num_vertices=4,
         edges=[(0, 1, 1.0), (2, 3, 1.0)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    path = shortest_path(graph, engine, 0, 3)
-    distances = shortest_path_lengths(graph, engine, 0)
+    path = _shortest_path(graph, engine, 0, 3)
+    distances = _shortest_path_lengths(graph, engine, 0)
 
     assert path == []
     assert math.isinf(distances[3])

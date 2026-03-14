@@ -10,9 +10,11 @@ find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
 
 pybind11_add_module(_native
-        cpp/src/module.cpp
+        cpp/module.cpp
         cpp/src/bfs.cpp
         cpp/src/sssp.cpp
+        cpp/src/native_csr_graph.cpp
+        cpp/src/multi_source_lengths.cpp
 )
 
 target_include_directories(_native PRIVATE cpp/include)
