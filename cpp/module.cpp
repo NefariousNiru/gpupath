@@ -1,4 +1,4 @@
-// file: cpp/src/module.cpp
+// file: cpp/module.cpp
 
 #include <optional>
 #include <string>
@@ -9,6 +9,7 @@
 #include <pybind11/stl.h>
 
 #include "gpupath/bfs.hpp"
+#include "gpupath/multi_source_lengths.hpp"
 #include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
 #include "gpupath/types.hpp"
@@ -291,5 +292,145 @@ PYBIND11_MODULE(_native, m) {
         "Raises:\n"
         "    ValueError: If any explicit edge weight is negative.\n"
         "    IndexError: If ``source`` is out of range."
+    );
+
+    // --- Multi-source shortest-path lengths --------------------------------
+
+    m.def(
+        "multi_source_bfs_lengths",
+        py::overload_cast<
+            const gpupath::NativeCsrGraph &,
+            const std::vector<int> &,
+            const std::optional<std::vector<int> > &,
+            int>(&gpupath::multi_source_bfs_lengths),
+        py::arg("graph"),
+        py::arg("sources"),
+        py::arg("targets") = std::nullopt,
+        py::arg("num_threads") = 0,
+        py::call_guard<py::gil_scoped_release>(),
+        "Compute unweighted shortest-path lengths for many sources on a "
+        "prepared native CSR graph.\n\n"
+        "Args:\n"
+        "    graph: Prepared native CSR graph.\n"
+        "    sources: Source vertices. Row order in the returned matrix matches "
+        "this input exactly.\n"
+        "    targets: Optional target subset. If provided, each row contains "
+        "only those columns in the same order. If omitted, each row contains "
+        "distances to all vertices.\n"
+        "    num_threads: Requested CPU thread count. Use 0 to select a "
+        "backend default.\n\n"
+        "Returns:\n"
+        "    A dense matrix of BFS distances. Unreachable vertices retain -1.\n\n"
+        "Raises:\n"
+        "    IndexError: If any source or target vertex is out of range."
+    );
+
+    m.def(
+        "multi_source_bfs_lengths",
+        py::overload_cast<
+            std::size_t,
+            const std::vector<int> &,
+            const std::vector<int> &,
+            const std::vector<int> &,
+            const std::optional<std::vector<int> > &,
+            int>(&gpupath::multi_source_bfs_lengths),
+        py::arg("num_vertices"),
+        py::arg("indptr"),
+        py::arg("indices"),
+        py::arg("sources"),
+        py::arg("targets") = std::nullopt,
+        py::arg("num_threads") = 0,
+        py::call_guard<py::gil_scoped_release>(),
+        "Compute unweighted shortest-path lengths for many sources on a raw "
+        "CSR graph.\n\n"
+        "Args:\n"
+        "    num_vertices: Total number of vertices.\n"
+        "    indptr: CSR row-pointer array of length ``num_vertices + 1``.\n"
+        "    indices: Flat neighbor array.\n"
+        "    sources: Source vertices. Row order in the returned matrix matches "
+        "this input exactly.\n"
+        "    targets: Optional target subset. If provided, each row contains "
+        "only those columns in the same order. If omitted, each row contains "
+        "distances to all vertices.\n"
+        "    num_threads: Requested CPU thread count. Use 0 to select a "
+        "backend default.\n\n"
+        "Returns:\n"
+        "    A dense matrix of BFS distances. Unreachable vertices retain -1.\n\n"
+        "Raises:\n"
+        "    ValueError: If the CSR structure is malformed.\n"
+        "    IndexError: If any source, target, or neighbor index is out of range."
+    );
+
+    m.def(
+        "multi_source_sssp_lengths",
+        py::overload_cast<
+            const gpupath::NativeCsrGraph &,
+            const std::vector<int> &,
+            const std::optional<std::vector<int> > &,
+            int>(&gpupath::multi_source_sssp_lengths),
+        py::arg("graph"),
+        py::arg("sources"),
+        py::arg("targets") = std::nullopt,
+        py::arg("num_threads") = 0,
+        py::call_guard<py::gil_scoped_release>(),
+        "Compute weighted shortest-path lengths for many sources on a prepared "
+        "native CSR graph.\n\n"
+        "Args:\n"
+        "    graph: Prepared native CSR graph.\n"
+        "    sources: Source vertices. Row order in the returned matrix matches "
+        "this input exactly.\n"
+        "    targets: Optional target subset. If provided, each row contains "
+        "only those columns in the same order. If omitted, each row contains "
+        "distances to all vertices.\n"
+        "    num_threads: Requested CPU thread count. Use 0 to select a "
+        "backend default.\n\n"
+        "Returns:\n"
+        "    A dense matrix of shortest-path costs. Unreachable vertices "
+        "retain ``inf``.\n\n"
+        "Raises:\n"
+        "    ValueError: If any explicit edge weight is negative.\n"
+        "    IndexError: If any source or target vertex is out of range."
+    );
+
+    m.def(
+        "multi_source_sssp_lengths",
+        py::overload_cast<
+            std::size_t,
+            const std::vector<int> &,
+            const std::vector<int> &,
+            const std::optional<std::vector<double> > &,
+            const std::vector<int> &,
+            const std::optional<std::vector<int> > &,
+            int>(&gpupath::multi_source_sssp_lengths),
+        py::arg("num_vertices"),
+        py::arg("indptr"),
+        py::arg("indices"),
+        py::arg("weights") = std::nullopt,
+        py::arg("sources"),
+        py::arg("targets") = std::nullopt,
+        py::arg("num_threads") = 0,
+        py::call_guard<py::gil_scoped_release>(),
+        "Compute weighted shortest-path lengths for many sources on a raw CSR "
+        "graph.\n\n"
+        "Args:\n"
+        "    num_vertices: Total number of vertices.\n"
+        "    indptr: CSR row-pointer array of length ``num_vertices + 1``.\n"
+        "    indices: Flat neighbor array.\n"
+        "    weights: Optional per-edge weights parallel to ``indices``. If "
+        "omitted, each edge is treated as weight ``1.0``.\n"
+        "    sources: Source vertices. Row order in the returned matrix matches "
+        "this input exactly.\n"
+        "    targets: Optional target subset. If provided, each row contains "
+        "only those columns in the same order. If omitted, each row contains "
+        "distances to all vertices.\n"
+        "    num_threads: Requested CPU thread count. Use 0 to select a "
+        "backend default.\n\n"
+        "Returns:\n"
+        "    A dense matrix of shortest-path costs. Unreachable vertices "
+        "retain ``inf``.\n\n"
+        "Raises:\n"
+        "    ValueError: If the CSR structure is malformed or if any weight "
+        "is negative.\n"
+        "    IndexError: If any source, target, or neighbor index is out of range."
     );
 }
