@@ -7,6 +7,7 @@ import math
 from collections import deque
 from typing import Literal, Sequence
 
+from gpupath import _utils
 from gpupath.engine.base import PathEngine
 from gpupath.engine.bmssp import _DEFAULT_K, _DEFAULT_T, _bmssp
 from gpupath.graph import CSRGraph
@@ -171,6 +172,10 @@ class ReferencePathEngine(PathEngine):
         """
         if not sources:
             return []
+
+        _utils._validate_vertices(graph, sources)
+        if targets is not None:
+            _utils._validate_vertices(graph, targets)
 
         matrix: list[list[int] | list[float]] = []
 

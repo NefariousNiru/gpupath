@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal, Sequence
 
 import gpupath._native as _native
+from gpupath import _utils
 from gpupath.engine.base import PathEngine
 from gpupath.engine.native_graph import NativeGraphHandle
 from gpupath.graph import CSRGraph
@@ -15,7 +16,6 @@ class NativePathEngine(PathEngine):
     """A native CPU-backed implementation of :class:`~gpupath.engine.base.PathEngine`.
 
     This backend dispatches core graph traversals to the compiled C++ extension.
-    TODO: Make native graphs default
     """
 
     def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
@@ -115,10 +115,10 @@ class NativePathEngine(PathEngine):
     ) -> list[list[int]] | list[list[float]]:
         """Compute shortest-path lengths for multiple sources on *graph*.
 
-        Native backends should override this with a batched implementation
-        that executes the full multi-source request inside the compiled
-        layer, reducing Python round-trips relative to repeated single-source
-        calls.
+        Executes the full multi-source request through the compiled native
+        backend, reducing Python round-trips relative to repeated single-source
+        calls. For unweighted graphs this dispatches to native batched BFS.
+        For weighted graphs this dispatches to native batched SSSP.
 
         Args:
             graph: The graph to traverse, stored in CSR format.
@@ -126,18 +126,45 @@ class NativePathEngine(PathEngine):
                 be computed.
             targets: Optional subset of target vertices to retain in each
                 returned row.
-            method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+            method: Algorithm selection for weighted graphs. BMSSP
+                (experimental) or Dijkstra.
 
         Returns:
             A matrix of shortest-path lengths whose row order matches
             *sources* and whose optional column order matches *targets*.
 
         Raises:
-            NotImplementedError: Always, until the native batched backend is
-                implemented.
+            NotImplementedError: If ``method="bmssp"`` is requested, since the
+                native batched BMSSP path is not implemented.
         """
-        raise NotImplementedError(
-            "Native multi_source_lengths() is not implemented yet."
+        if not sources:
+            return []
+
+        _utils._validate_vertices(graph, sources)
+        if targets is not None:
+            _utils._validate_vertices(graph, targets)
+
+        prepared = self.prepare_graph(graph)
+
+        source_list = list(sources)
+        target_list = None if targets is None else list(targets)
+
+        if method == "bmssp":
+            raise NotImplementedError(
+                "Native multi_source_lengths() does not support method='bmssp' yet."
+            )
+
+        if graph.is_weighted:
+            return _native.multi_source_sssp_lengths(
+                prepared.native_graph,
+                source_list,
+                target_list,
+            )
+
+        return _native.multi_source_bfs_lengths(
+            prepared.native_graph,
+            source_list,
+            target_list,
         )
 
     @staticmethod
