@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Literal, Sequence
 
-from gpupath.engine.native_graph import NativeGraphHandle
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult, SsspResult
 
@@ -28,7 +27,7 @@ class PathEngine(ABC):
     """
 
     @abstractmethod
-    def bfs(self, graph: CSRGraph | NativeGraphHandle, source: int) -> BfsResult:
+    def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
         """Run Breadth-First Search from *source* on *graph*.
 
         Computes the shortest-hop distance and predecessor vertex for every
@@ -53,7 +52,7 @@ class PathEngine(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def sssp(self, graph: CSRGraph | NativeGraphHandle, source: int) -> SsspResult:
+    def sssp(self, graph: CSRGraph, source: int) -> SsspResult:
         """Run Single-Source Shortest Path (SSSP) from *source* on *graph*.
 
         Computes the lowest-cost distance and the predecessor vertex for every
@@ -80,7 +79,7 @@ class PathEngine(ABC):
         raise NotImplementedError
 
     # @abstractmethod
-    def bmssp(self, graph: CSRGraph | NativeGraphHandle, source: int) -> SsspResult:
+    def bmssp(self, graph: CSRGraph, source: int) -> SsspResult:
         """Experimental/Unimplemented: Run BMSSP from *source* on *graph*.
 
         Implements the deterministic ``O(m log^(2/3) n)`` algorithm from:
@@ -115,7 +114,7 @@ class PathEngine(ABC):
     @abstractmethod
     def multi_source_lengths(
         self,
-        graph: CSRGraph | NativeGraphHandle,
+        graph: CSRGraph,
         sources: Sequence[int],
         targets: Sequence[int] | None = None,
         *,

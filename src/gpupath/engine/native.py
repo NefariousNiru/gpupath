@@ -14,14 +14,11 @@ from gpupath.types import BfsResult, SsspResult
 class NativePathEngine(PathEngine):
     """A native CPU-backed implementation of :class:`~gpupath.engine.base.PathEngine`.
 
-    This backend dispatches core graph traversals to the compiled C++ extension
-    while preserving the same Python-facing contract as :class:`ReferencePathEngine`.
-
-    It is intended to serve as the first compiled backend and to remain
-    behaviorally equivalent to the pure-Python CPU engine.
+    This backend dispatches core graph traversals to the compiled C++ extension.
+    TODO: Make native graphs default
     """
 
-    def bfs(self, graph: CSRGraph | NativeGraphHandle, source: int) -> BfsResult:
+    def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
         """Run Breadth-First Search from *source* on *graph*.
 
         Computes the shortest-hop distance and predecessor vertex for every
@@ -64,7 +61,7 @@ class NativePathEngine(PathEngine):
             predecessors=list(native_result.predecessors),
         )
 
-    def sssp(self, graph: CSRGraph | NativeGraphHandle, source: int) -> SsspResult:
+    def sssp(self, graph: CSRGraph, source: int) -> SsspResult:
         """Run Single-Source Shortest Path (SSSP) from *source* on *graph*.
 
         Computes the minimum-cost distance and predecessor vertex for every
