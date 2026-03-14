@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal, Sequence
+
 import gpupath._native as _native
 from gpupath.engine.base import PathEngine
 from gpupath.engine.native_graph import NativeGraphHandle
@@ -104,6 +106,41 @@ class NativePathEngine(PathEngine):
         return SsspResult(
             distances=list(native_result.distances),
             predecessors=list(native_result.predecessors),
+        )
+
+    def multi_source_lengths(
+        self,
+        graph: CSRGraph,
+        sources: Sequence[int],
+        targets: Sequence[int] | None = None,
+        *,
+        method: Literal["bmssp", "default"] = "default",
+    ) -> list[list[int]] | list[list[float]]:
+        """Compute shortest-path lengths for multiple sources on *graph*.
+
+        Native backends should override this with a batched implementation
+        that executes the full multi-source request inside the compiled
+        layer, reducing Python round-trips relative to repeated single-source
+        calls.
+
+        Args:
+            graph: The graph to traverse, stored in CSR format.
+            sources: Source vertices for which shortest-path lengths should
+                be computed.
+            targets: Optional subset of target vertices to retain in each
+                returned row.
+            method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+
+        Returns:
+            A matrix of shortest-path lengths whose row order matches
+            *sources* and whose optional column order matches *targets*.
+
+        Raises:
+            NotImplementedError: Always, until the native batched backend is
+                implemented.
+        """
+        raise NotImplementedError(
+            "Native multi_source_lengths() is not implemented yet."
         )
 
     @staticmethod

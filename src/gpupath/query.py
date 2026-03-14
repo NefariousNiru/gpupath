@@ -384,15 +384,4 @@ def _cost_matrix(
     _utils._validate_vertices(graph, sources)
     _utils._validate_vertices(graph, targets)
 
-    matrix: list[list[int]] | list[list[float]] = []
-    for source in sources:
-        row = _shortest_path_lengths(
-            graph,
-            engine,
-            source,
-            method=method,
-            targets=targets,
-        )
-        matrix.append(row)
-
-    return matrix
+    return engine.multi_source_lengths(graph, sources, targets, method=method)

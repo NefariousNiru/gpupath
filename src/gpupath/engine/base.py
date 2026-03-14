@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Literal, Sequence
 
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult, SsspResult
@@ -107,5 +108,54 @@ class PathEngine(ABC):
         Raises:
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
             NotImplementedError: If the subclass has not overridden this method.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def multi_source_lengths(
+        self,
+        graph: CSRGraph,
+        sources: Sequence[int],
+        targets: Sequence[int] | None = None,
+        *,
+        method: Literal["bmssp", "default"] = "default",
+    ) -> list[list[int]] | list[list[float]]:
+        """Compute shortest-path lengths for multiple sources on *graph*.
+
+        This method defines the backend contract used by the public
+        cost-matrix-style query path. It computes one row of shortest-path
+        lengths per source in *sources*, preserving source order exactly.
+        When *targets* is provided, each row is filtered to those target
+        vertices in the same order.
+
+        Reference engines may implement this by repeatedly calling
+        :meth:`bfs` or :meth:`sssp` in Python. Native engines may override
+        this with a batched backend implementation that reduces Python
+        round-trips and executes the full multi-source request internally.
+
+        Args:
+            graph: The graph to traverse, stored in CSR format.
+            sources: Source vertices for which shortest-path lengths should
+                be computed. Each source must be a valid vertex id in
+                ``[0, graph.num_vertices)``. The returned matrix row order
+                must match this input order exactly.
+            targets: Optional subset of target vertices. If provided, each
+                returned row contains only distances to these targets, and
+                column order must match this input order exactly. If omitted,
+                each row contains distances for all vertices in the graph.
+            method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+
+        Returns:
+            A matrix of shortest-path lengths. For unweighted traversal, each
+            row contains integer hop distances with ``-1`` used for
+            unreachable vertices. For weighted traversal, each row contains
+            floating-point path costs with ``float("inf")`` used for
+            unreachable vertices.
+
+        Raises:
+            ValueError: If any source or target vertex is outside
+                ``[0, graph.num_vertices)``.
+            NotImplementedError: If the subclass has not overridden this
+                method.
         """
         raise NotImplementedError

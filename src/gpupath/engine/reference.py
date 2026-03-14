@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 import math
 from collections import deque
+from typing import Literal, Sequence
 
 from gpupath.engine.base import PathEngine
 from gpupath.engine.bmssp import _DEFAULT_K, _DEFAULT_T, _bmssp
@@ -132,6 +133,65 @@ class ReferencePathEngine(PathEngine):
                     heapq.heappush(heap, (cand, v))
 
         return SsspResult(distances=distances, predecessors=predecessors)
+
+    def multi_source_lengths(
+        self,
+        graph: CSRGraph,
+        sources: Sequence[int],
+        targets: Sequence[int] | None = None,
+        *,
+        method: Literal["bmssp", "default"] = "default",
+    ) -> list[list[int]] | list[list[float]]:
+        """Compute shortest-path lengths for multiple sources on *graph*.
+
+        This reference implementation executes one single-source traversal per
+        source in Python and assembles the resulting rows into a distance
+        matrix. It preserves source order exactly and applies optional target
+        filtering after each traversal.
+
+        Args:
+            graph: The graph to traverse, stored in CSR format.
+            sources: Source vertices for which shortest-path lengths should
+                be computed. Each source must be a valid vertex id in
+                ``[0, graph.num_vertices)``.
+            targets: Optional subset of target vertices. If provided, each
+                returned row contains only distances to these targets, in the
+                same order.
+            method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+
+        Returns:
+            A matrix of shortest-path lengths whose row order matches
+            *sources*. For unweighted graphs, unreachable vertices are
+            reported as ``-1``. For weighted graphs, unreachable vertices are
+            reported as ``float("inf")``.
+
+        Raises:
+            ValueError: If any source or target vertex is outside
+                ``[0, graph.num_vertices)``.
+        """
+        if not sources:
+            return []
+
+        matrix: list[list[int] | list[float]] = []
+
+        for source in sources:
+            if graph.is_weighted:
+                result = (
+                    self.bmssp(graph, source)
+                    if method == "bmssp"
+                    else self.sssp(graph, source)
+                )
+            else:
+                result = self.bfs(graph, source)
+            distances = result.distances
+            row = (
+                [distances[target] for target in targets]
+                if targets is not None
+                else list(distances)
+            )
+            matrix.append(row)
+
+        return matrix
 
     def bmssp(self, graph: CSRGraph, source: int) -> SsspResult:
         """BMSSP: deterministic ``O(m log^(2/3) n)`` single-source shortest paths.
