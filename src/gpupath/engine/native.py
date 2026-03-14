@@ -1,25 +1,25 @@
-# file: gpupath/engine/native_cpu.py
+# file: gpupath/engine/native.py
 
 from __future__ import annotations
 
 import gpupath._native as _native
 from gpupath.engine.base import PathEngine
-from gpupath.engine.prepared import NativeCpuPreparedGraph
+from gpupath.engine.native_graph import NativeGraphHandle
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult, SsspResult
 
 
-class NativeCpuPathEngine(PathEngine):
+class NativePathEngine(PathEngine):
     """A native CPU-backed implementation of :class:`~gpupath.engine.base.PathEngine`.
 
     This backend dispatches core graph traversals to the compiled C++ extension
-    while preserving the same Python-facing contract as :class:`CpuPathEngine`.
+    while preserving the same Python-facing contract as :class:`ReferencePathEngine`.
 
     It is intended to serve as the first compiled backend and to remain
     behaviorally equivalent to the pure-Python CPU engine.
     """
 
-    def bfs(self, graph: CSRGraph, source: int) -> BfsResult:
+    def bfs(self, graph: CSRGraph | NativeGraphHandle, source: int) -> BfsResult:
         """Run Breadth-First Search from *source* on *graph*.
 
         Computes the shortest-hop distance and predecessor vertex for every
@@ -41,7 +41,7 @@ class NativeCpuPathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            if isinstance(graph, NativeCpuPreparedGraph):
+            if isinstance(graph, NativeGraphHandle):
                 native_result = _native.bfs_unweighted(
                     graph.native_graph,
                     source,
@@ -62,7 +62,7 @@ class NativeCpuPathEngine(PathEngine):
             predecessors=list(native_result.predecessors),
         )
 
-    def sssp(self, graph: CSRGraph, source: int) -> SsspResult:
+    def sssp(self, graph: CSRGraph | NativeGraphHandle, source: int) -> SsspResult:
         """Run Single-Source Shortest Path (SSSP) from *source* on *graph*.
 
         Computes the minimum-cost distance and predecessor vertex for every
@@ -85,7 +85,7 @@ class NativeCpuPathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            if isinstance(graph, NativeCpuPreparedGraph):
+            if isinstance(graph, NativeGraphHandle):
                 native_result = _native.sssp(
                     graph.native_graph,
                     source,
@@ -107,7 +107,7 @@ class NativeCpuPathEngine(PathEngine):
         )
 
     @staticmethod
-    def prepare_graph(graph: CSRGraph) -> NativeCpuPreparedGraph:
+    def prepare_graph(graph: CSRGraph) -> NativeGraphHandle:
         """Prepare a Python CSR graph for repeated native CPU traversals.
 
         Args:
@@ -117,4 +117,4 @@ class NativeCpuPathEngine(PathEngine):
             A prepared native graph wrapper that can be reused across repeated
             BFS and SSSP queries.
         """
-        return NativeCpuPreparedGraph.from_csr_graph(graph)
+        return NativeGraphHandle.from_csr_graph(graph)

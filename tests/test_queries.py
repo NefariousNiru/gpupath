@@ -6,7 +6,9 @@ import math
 
 import pytest
 
-from gpupath import CpuPathEngine, CSRGraph, cost_matrix, shortest_path_lengths
+from gpupath import CSRGraph
+from gpupath.engine import ReferencePathEngine
+from gpupath.query import _cost_matrix, _shortest_path_lengths
 from gpupath.types import UNREACHABLE_DISTANCE
 
 
@@ -15,9 +17,9 @@ def test_shortest_path_lengths_selected_targets_unweighted() -> None:
         num_vertices=6,
         edges=[(0, 1), (0, 2), (1, 3), (2, 4)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    distances = shortest_path_lengths(graph, engine, 0, targets=[0, 3, 4, 5])
+    distances = _shortest_path_lengths(graph, engine, 0, targets=[0, 3, 4, 5])
 
     assert distances == [0, 2, 2, UNREACHABLE_DISTANCE]
 
@@ -32,9 +34,9 @@ def test_shortest_path_lengths_selected_targets_weighted() -> None:
             (2, 4, 1.0),
         ],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    distances = shortest_path_lengths(graph, engine, 0, targets=[1, 2, 4, 3])
+    distances = _shortest_path_lengths(graph, engine, 0, targets=[1, 2, 4, 3])
 
     assert distances[0] == 2.0
     assert distances[1] == 3.0
@@ -53,9 +55,9 @@ def test_cost_matrix_unweighted() -> None:
             (4, 5),
         ],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    matrix = cost_matrix(
+    matrix = _cost_matrix(
         graph,
         engine,
         sources=[0, 2],
@@ -80,9 +82,9 @@ def test_cost_matrix_weighted() -> None:
             (3, 4, 3.0),
         ],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    matrix = cost_matrix(
+    matrix = _cost_matrix(
         graph,
         engine,
         sources=[0, 1],
@@ -100,9 +102,9 @@ def test_cost_matrix_empty_sources() -> None:
         num_vertices=3,
         edges=[(0, 1)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
-    assert cost_matrix(graph, engine, sources=[], targets=[0, 1]) == []
+    assert _cost_matrix(graph, engine, sources=[], targets=[0, 1]) == []
 
 
 def test_cost_matrix_invalid_target() -> None:
@@ -110,10 +112,10 @@ def test_cost_matrix_invalid_target() -> None:
         num_vertices=3,
         edges=[(0, 1)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
     with pytest.raises(ValueError, match="target 5 out of range"):
-        cost_matrix(graph, engine, sources=[0], targets=[5])
+        _cost_matrix(graph, engine, sources=[0], targets=[5])
 
 
 def test_cost_matrix_invalid_source() -> None:
@@ -121,7 +123,7 @@ def test_cost_matrix_invalid_source() -> None:
         num_vertices=3,
         edges=[(0, 1)],
     )
-    engine = CpuPathEngine()
+    engine = ReferencePathEngine()
 
     with pytest.raises(ValueError, match="target 4 out of range"):
-        cost_matrix(graph, engine, sources=[4], targets=[1])
+        _cost_matrix(graph, engine, sources=[4], targets=[1])

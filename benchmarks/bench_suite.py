@@ -9,10 +9,10 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from gpupath import cost_matrix, shortest_path_lengths
-from gpupath.engine.cpu import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
+from gpupath.engine.native import NativePathEngine
+from gpupath.engine.reference import ReferencePathEngine
 from gpupath.graph import CSRGraph
+from gpupath.query import _cost_matrix, _shortest_path_lengths
 
 # ---------------------------------------------------------------------------
 # Benchmark result model
@@ -172,7 +172,7 @@ def run_bfs_prepared_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark raw native CPU BFS vs prepared native CPU BFS on one graph."""
-    native_engine = NativeCpuPathEngine()
+    native_engine = NativePathEngine()
     prepared_graph = native_engine.prepare_graph(graph)
 
     def bench_native_bfs():
@@ -198,7 +198,7 @@ def run_sssp_prepared_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark raw native CPU SSSP vs prepared native CPU SSSP on one graph."""
-    native_engine = NativeCpuPathEngine()
+    native_engine = NativePathEngine()
     prepared_graph = native_engine.prepare_graph(graph)
 
     def bench_native_sssp():
@@ -225,7 +225,7 @@ def run_bfs_repeated_prepared_backend_benchmark(
     seed: int,
 ) -> None:
     """Benchmark repeated raw native BFS vs prepared native BFS."""
-    native_engine = NativeCpuPathEngine()
+    native_engine = NativePathEngine()
     prepared_graph = native_engine.prepare_graph(graph)
 
     rng = random.Random(seed)
@@ -256,7 +256,7 @@ def run_sssp_repeated_prepared_backend_benchmark(
     seed: int,
 ) -> None:
     """Benchmark repeated raw native SSSP vs prepared native SSSP."""
-    native_engine = NativeCpuPathEngine()
+    native_engine = NativePathEngine()
     prepared_graph = native_engine.prepare_graph(graph)
 
     rng = random.Random(seed)
@@ -291,8 +291,8 @@ def run_bfs_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark Python CPU BFS vs native CPU BFS on one graph."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     def bench_python_bfs():
         return py_engine.bfs(graph, source)
@@ -317,8 +317,8 @@ def run_sssp_backend_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark Python CPU SSSP vs native CPU SSSP on one graph."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     def bench_python_sssp():
         return py_engine.sssp(graph, source)
@@ -348,16 +348,16 @@ def run_shortest_path_lengths_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark API-level shortest_path_lengths for default traversal."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     method_label = "default"
 
     def bench_python_api():
-        return shortest_path_lengths(graph, py_engine, source, method=method_label)
+        return _shortest_path_lengths(graph, py_engine, source, method=method_label)
 
     def bench_native_api():
-        return shortest_path_lengths(graph, native_engine, source, method=method_label)
+        return _shortest_path_lengths(graph, native_engine, source, method=method_label)
 
     py_result = timed_run(bench_python_api, repeats=repeats)
     native_result = timed_run(bench_native_api, repeats=repeats)
@@ -378,15 +378,15 @@ def run_cost_matrix_benchmark(
     seed: int,
 ) -> None:
     """Benchmark API-level cost_matrix for Python and native backends."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     rng = random.Random(seed)
     sources = [rng.randrange(graph.num_vertices) for _ in range(num_sources)]
     targets = [rng.randrange(graph.num_vertices) for _ in range(num_targets)]
 
     def bench_python_cost_matrix():
-        return cost_matrix(
+        return _cost_matrix(
             graph,
             py_engine,
             sources=sources,
@@ -395,7 +395,7 @@ def run_cost_matrix_benchmark(
         )
 
     def bench_native_cost_matrix():
-        return cost_matrix(
+        return _cost_matrix(
             graph,
             native_engine,
             sources=sources,
@@ -421,10 +421,10 @@ def run_bmssp_benchmark(
     repeats: int,
 ) -> None:
     """Benchmark experimental BMSSP on Python CPU backend only."""
-    py_engine = CpuPathEngine()
+    py_engine = ReferencePathEngine()
 
     def bench_bmssp():
-        return shortest_path_lengths(graph, py_engine, source, method="bmssp")
+        return _shortest_path_lengths(graph, py_engine, source, method="bmssp")
 
     print("[API Benchmark] BMSSP experimental")
     try:

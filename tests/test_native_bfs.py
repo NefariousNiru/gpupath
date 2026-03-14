@@ -1,8 +1,7 @@
 # file: tests/test_native_bfs.py
 
-import gpupath._native as native
-from gpupath import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
+from gpupath.engine import ReferencePathEngine
+from gpupath.engine.native import NativePathEngine
 from gpupath.graph import CSRGraph
 from gpupath.types import BfsResult
 
@@ -13,7 +12,7 @@ def test_native_cpu_engine_bfs_returns_python_bfs_result():
         indices=[1, 2, 3, 3],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     result = engine.bfs(graph, 0)
 
     assert isinstance(result, BfsResult)
@@ -30,7 +29,7 @@ def test_native_cpu_engine_bfs_unreachable():
         indices=[1, 3],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     result = engine.bfs(graph, 0)
 
     assert result.distances == [0, 1, -1, -1, -1]
@@ -43,7 +42,7 @@ def test_native_cpu_engine_bfs_bad_source_matches_python_contract():
         indices=[1],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
 
     try:
         engine.bfs(graph, 99)
@@ -65,8 +64,8 @@ def test_native_cpu_bfs_matches_python_cpu():
         directed=True,
     )
 
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     py_result = py_engine.bfs(graph, 0)
     native_result = native_engine.bfs(graph, 0)

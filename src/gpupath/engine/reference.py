@@ -1,4 +1,4 @@
-# file: gpupath/engine/cpu.py
+# file: gpupath/engine/reference.py
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ from gpupath.types import (
 )
 
 
-class CpuPathEngine(PathEngine):
-    """A CPU-based implementation of :class:`~gpupath.engine.base.PathEngine`.
+class ReferencePathEngine(PathEngine):
+    """A Python-CPU-based implementation of :class:`~gpupath.engine.base.PathEngine`.
 
-    This backend runs entirely on the host and serves as the correctness
+    This backend runs entirely on the host (python) and serves as the correctness
     baseline for future accelerated backends.
     """
 

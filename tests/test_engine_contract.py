@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import math
 
-from gpupath.engine.cpu import CpuPathEngine
+from gpupath.engine.reference import ReferencePathEngine
 from gpupath.graph import CSRGraph
 from gpupath.query import (
-    cost_matrix,
-    predecessors,
-    shortest_path,
-    shortest_path_lengths,
+    _cost_matrix,
+    _predecessors,
+    _shortest_path,
+    _shortest_path_lengths,
 )
 from gpupath.types import NO_PREDECESSOR, UNREACHABLE_DISTANCE
 
 
 def _engine():
-    return CpuPathEngine()
+    return ReferencePathEngine()
 
 
 def test_engine_contract_bfs_shapes_and_sentinels() -> None:
@@ -26,8 +26,8 @@ def test_engine_contract_bfs_shapes_and_sentinels() -> None:
     )
     engine = _engine()
 
-    dist = shortest_path_lengths(graph, engine, 0)
-    preds = predecessors(graph, engine, 0)
+    dist = _shortest_path_lengths(graph, engine, 0)
+    preds = _predecessors(graph, engine, 0)
 
     assert len(dist) == graph.num_vertices
     assert len(preds) == graph.num_vertices
@@ -44,8 +44,8 @@ def test_engine_contract_sssp_shapes_and_sentinels() -> None:
     )
     engine = _engine()
 
-    dist = shortest_path_lengths(graph, engine, 0)
-    preds = predecessors(graph, engine, 0)
+    dist = _shortest_path_lengths(graph, engine, 0)
+    preds = _predecessors(graph, engine, 0)
 
     assert len(dist) == graph.num_vertices
     assert len(preds) == graph.num_vertices
@@ -62,7 +62,7 @@ def test_engine_contract_shortest_path_unweighted() -> None:
     )
     engine = _engine()
 
-    path = shortest_path(graph, engine, 0, 3)
+    path = _shortest_path(graph, engine, 0, 3)
     assert path == [0, 1, 2, 3]
 
 
@@ -73,7 +73,7 @@ def test_engine_contract_shortest_path_weighted() -> None:
     )
     engine = _engine()
 
-    path = shortest_path(graph, engine, 0, 3)
+    path = _shortest_path(graph, engine, 0, 3)
     assert path == [0, 1, 2, 3]
 
 
@@ -84,7 +84,7 @@ def test_engine_contract_cost_matrix_ordering() -> None:
     )
     engine = _engine()
 
-    matrix = cost_matrix(
+    matrix = _cost_matrix(
         graph,
         engine,
         sources=[0, 1],

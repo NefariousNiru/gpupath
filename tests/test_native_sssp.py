@@ -8,8 +8,8 @@ import random
 import pytest
 
 import gpupath._native as native
-from gpupath.engine.cpu import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
+from gpupath.engine.native import NativePathEngine
+from gpupath.engine.reference import ReferencePathEngine
 from gpupath.graph import CSRGraph
 from gpupath.types import SsspResult
 
@@ -81,7 +81,7 @@ def test_native_cpu_engine_sssp_returns_python_sssp_result() -> None:
         weights=[1.0, 4.0, 2.0, 1.0],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     result = engine.sssp(graph, 0)
 
     assert isinstance(result, SsspResult)
@@ -96,7 +96,7 @@ def test_native_cpu_engine_sssp_unweighted_graph() -> None:
         indices=[1, 2, 3, 3],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     result = engine.sssp(graph, 0)
 
     assert result.distances == [0.0, 1.0, 1.0, 2.0]
@@ -114,7 +114,7 @@ def test_native_cpu_engine_sssp_bad_source_matches_python_contract() -> None:
         weights=[1.0],
     )
 
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
 
     with pytest.raises(ValueError, match="source 99 out of range"):
         engine.sssp(graph, 99)
@@ -140,8 +140,8 @@ def test_native_cpu_sssp_matches_python_cpu_weighted() -> None:
         directed=True,
     )
 
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     py_result = py_engine.sssp(graph, 0)
     native_result = native_engine.sssp(graph, 0)
@@ -164,8 +164,8 @@ def test_native_cpu_sssp_matches_python_cpu_unweighted() -> None:
         directed=True,
     )
 
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     py_result = py_engine.sssp(graph, 0)
     native_result = native_engine.sssp(graph, 0)
@@ -181,8 +181,8 @@ def test_native_cpu_sssp_matches_python_cpu_unweighted() -> None:
 
 def assert_bfs_parity(graph: CSRGraph, source: int) -> None:
     """Assert BFS parity between Python and native CPU backends."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     py_result = py_engine.bfs(graph, source)
     native_result = native_engine.bfs(graph, source)
@@ -193,8 +193,8 @@ def assert_bfs_parity(graph: CSRGraph, source: int) -> None:
 
 def assert_sssp_parity(graph: CSRGraph, source: int) -> None:
     """Assert SSSP parity between Python and native CPU backends."""
-    py_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    py_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
 
     py_result = py_engine.sssp(graph, source)
     native_result = native_engine.sssp(graph, source)

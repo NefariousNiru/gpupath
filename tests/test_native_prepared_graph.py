@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 import gpupath._native as _native
-from gpupath.engine.cpu import CpuPathEngine
-from gpupath.engine.native_cpu import NativeCpuPathEngine
-from gpupath.engine.prepared import NativeCpuPreparedGraph
+from gpupath.engine.native import NativePathEngine
+from gpupath.engine.native_graph import NativeGraphHandle
+from gpupath.engine.reference import ReferencePathEngine
 from gpupath.graph import CSRGraph
 
 # ---------------------------------------------------------------------------
@@ -166,11 +164,11 @@ def test_csr_graph_direct_constructor_rejects_negative_weight() -> None:
 def test_prepare_graph_returns_native_cpu_prepared_graph(
     unweighted_graph: CSRGraph,
 ) -> None:
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
 
     prepared = engine.prepare_graph(unweighted_graph)
 
-    assert isinstance(prepared, NativeCpuPreparedGraph)
+    assert isinstance(prepared, NativeGraphHandle)
     assert prepared.graph is unweighted_graph
     assert prepared.num_vertices == unweighted_graph.num_vertices
     assert prepared.is_weighted is False
@@ -180,11 +178,11 @@ def test_prepare_graph_returns_native_cpu_prepared_graph(
 def test_prepare_graph_returns_weighted_native_cpu_prepared_graph(
     weighted_graph: CSRGraph,
 ) -> None:
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
 
     prepared = engine.prepare_graph(weighted_graph)
 
-    assert isinstance(prepared, NativeCpuPreparedGraph)
+    assert isinstance(prepared, NativeGraphHandle)
     assert prepared.graph is weighted_graph
     assert prepared.num_vertices == weighted_graph.num_vertices
     assert prepared.is_weighted is True
@@ -194,7 +192,7 @@ def test_prepare_graph_returns_weighted_native_cpu_prepared_graph(
 def test_native_prepared_graph_unweighted_properties(
     unweighted_graph: CSRGraph,
 ) -> None:
-    prepared = NativeCpuPreparedGraph.from_csr_graph(unweighted_graph)
+    prepared = NativeGraphHandle.from_csr_graph(unweighted_graph)
 
     native_graph = prepared.native_graph
 
@@ -209,7 +207,7 @@ def test_native_prepared_graph_unweighted_properties(
 def test_native_prepared_graph_weighted_properties(
     weighted_graph: CSRGraph,
 ) -> None:
-    prepared = NativeCpuPreparedGraph.from_csr_graph(weighted_graph)
+    prepared = NativeGraphHandle.from_csr_graph(weighted_graph)
 
     native_graph = prepared.native_graph
 
@@ -227,8 +225,8 @@ def test_native_prepared_graph_weighted_properties(
 
 
 def test_bfs_parity_unweighted_graph(unweighted_graph: CSRGraph) -> None:
-    cpu_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    cpu_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
     prepared = native_engine.prepare_graph(unweighted_graph)
 
     cpu_result = cpu_engine.bfs(unweighted_graph, 0)
@@ -244,8 +242,8 @@ def test_bfs_parity_unweighted_graph(unweighted_graph: CSRGraph) -> None:
 def test_bfs_parity_disconnected_unweighted_graph(
     disconnected_unweighted_graph: CSRGraph,
 ) -> None:
-    cpu_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    cpu_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
     prepared = native_engine.prepare_graph(disconnected_unweighted_graph)
 
     cpu_result = cpu_engine.bfs(disconnected_unweighted_graph, 0)
@@ -259,8 +257,8 @@ def test_bfs_parity_disconnected_unweighted_graph(
 
 
 def test_sssp_parity_weighted_graph(weighted_graph: CSRGraph) -> None:
-    cpu_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    cpu_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
     prepared = native_engine.prepare_graph(weighted_graph)
 
     cpu_result = cpu_engine.sssp(weighted_graph, 0)
@@ -276,8 +274,8 @@ def test_sssp_parity_weighted_graph(weighted_graph: CSRGraph) -> None:
 def test_sssp_parity_disconnected_weighted_graph(
     disconnected_weighted_graph: CSRGraph,
 ) -> None:
-    cpu_engine = CpuPathEngine()
-    native_engine = NativeCpuPathEngine()
+    cpu_engine = ReferencePathEngine()
+    native_engine = NativePathEngine()
     prepared = native_engine.prepare_graph(disconnected_weighted_graph)
 
     cpu_result = cpu_engine.sssp(disconnected_weighted_graph, 0)
@@ -293,7 +291,7 @@ def test_sssp_parity_disconnected_weighted_graph(
 def test_prepared_bfs_preserves_invalid_source_contract(
     unweighted_graph: CSRGraph,
 ) -> None:
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     prepared = engine.prepare_graph(unweighted_graph)
 
     with pytest.raises(ValueError, match="source 99 out of range"):
@@ -303,7 +301,7 @@ def test_prepared_bfs_preserves_invalid_source_contract(
 def test_prepared_sssp_preserves_invalid_source_contract(
     weighted_graph: CSRGraph,
 ) -> None:
-    engine = NativeCpuPathEngine()
+    engine = NativePathEngine()
     prepared = engine.prepare_graph(weighted_graph)
 
     with pytest.raises(ValueError, match="source 99 out of range"):
@@ -318,7 +316,7 @@ def test_prepared_sssp_preserves_invalid_source_contract(
 def test_native_module_direct_bfs_prepared_overload(
     unweighted_graph: CSRGraph,
 ) -> None:
-    prepared = NativeCpuPreparedGraph.from_csr_graph(unweighted_graph)
+    prepared = NativeGraphHandle.from_csr_graph(unweighted_graph)
 
     result = _native.bfs_unweighted(prepared.native_graph, 0)
 
@@ -329,7 +327,7 @@ def test_native_module_direct_bfs_prepared_overload(
 def test_native_module_direct_sssp_prepared_overload(
     weighted_graph: CSRGraph,
 ) -> None:
-    prepared = NativeCpuPreparedGraph.from_csr_graph(weighted_graph)
+    prepared = NativeGraphHandle.from_csr_graph(weighted_graph)
 
     result = _native.sssp(prepared.native_graph, 0)
 

@@ -10,6 +10,7 @@ from gpupath.types import BfsResult, SsspResult
 
 class PathEngine(ABC):
     """Abstract base class for all path-finding engine implementations.
+    Refrain from using this directly and use public APIs.
 
     A :class:`PathEngine` defines the interface that every backend —
     CPU, GPU, or otherwise — must satisfy. Concrete subclasses are
@@ -55,7 +56,7 @@ class PathEngine(ABC):
 
         Computes the lowest-cost distance and the predecessor vertex for every
         vertex reachable from *source*. Unreachable vertices retain
-        ``UNREACHABLE_DISTANCE`` and ``NO_PREDECESSOR`` as their sentinel values.
+        ``INF_FLOAT`` and ``NO_PREDECESSOR`` as their sentinel values.
 
         Args:
             graph: The graph to traverse, stored in CSR format. Edge weights
@@ -78,7 +79,7 @@ class PathEngine(ABC):
 
     # @abstractmethod
     def bmssp(self, graph: CSRGraph, source: int) -> SsspResult:
-        """Experimental: Run BMSSP from *source* on *graph*.
+        """Experimental/Unimplemented: Run BMSSP from *source* on *graph*.
 
         Implements the deterministic ``O(m log^(2/3) n)`` algorithm from:
 

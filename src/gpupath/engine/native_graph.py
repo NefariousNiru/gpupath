@@ -1,4 +1,4 @@
-# file: src/gpupath/engine/prepared.py
+# file: src/gpupath/engine/native_graph.py
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from gpupath.graph import CSRGraph
 
 
 @dataclass(frozen=True, slots=True)
-class NativeCpuPreparedGraph:
+class NativeGraphHandle:
     """
     Prepared native graph handle for repeated path queries.
 
@@ -21,7 +21,7 @@ class NativeCpuPreparedGraph:
     native_graph: _NativeCsrGraph
 
     @classmethod
-    def from_csr_graph(cls, graph: CSRGraph) -> NativeCpuPreparedGraph:
+    def from_csr_graph(cls, graph: CSRGraph) -> NativeGraphHandle:
         """
         Build a prepared native graph from a Python CSRGraph.
 
@@ -29,7 +29,7 @@ class NativeCpuPreparedGraph:
             graph: Python CSR graph to prepare.
 
         Returns:
-            NativeCpuPreparedGraph wrapping the native graph handle.
+            NativeGraphHandle wrapping the native graph handle.
         """
         if graph.weights is None:
             native_graph = _NativeCsrGraph(
