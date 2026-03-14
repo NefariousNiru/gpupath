@@ -197,7 +197,7 @@ def shortest_path(
 def cost_matrix(
     graph: CSRGraph,
     sources: Sequence[int],
-    targets: Sequence[int],
+    targets: Sequence[int] | None = None,
     device: Device = Device.AUTO,
     method: Literal["bmssp", "default"] = "default",
 ) -> list[list[int]] | list[list[float]]:
@@ -356,7 +356,7 @@ def _cost_matrix(
     graph: CSRGraph,
     engine: PathEngine,
     sources: Sequence[int],
-    targets: Sequence[int],
+    targets: Sequence[int] | None = None,
     method: Literal["bmssp", "default"] = "default",
 ) -> list[list[int]] | list[list[float]]:
     """Internal helper to compute a cost matrix using a specific engine.
