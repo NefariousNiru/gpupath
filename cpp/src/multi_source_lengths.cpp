@@ -180,8 +180,8 @@ namespace gpupath {
             num_threads,
             [&](const std::size_t begin, const std::size_t end) {
                 for (std::size_t i = begin; i < end; ++i) {
-                    const BfsResult result = bfs_unweighted(graph, sources[i]);
-                    matrix[i] = select_targets(result.distances, targets);
+                    const auto [distances, predecessors] = bfs_unweighted(graph, sources[i]);
+                    matrix[i] = select_targets(distances, targets);
                 }
             }
         );
@@ -211,41 +211,12 @@ namespace gpupath {
             num_threads,
             [&](const std::size_t begin, const std::size_t end) {
                 for (std::size_t i = begin; i < end; ++i) {
-                    const SsspResult result = sssp(graph, sources[i]);
-                    matrix[i] = select_targets(result.distances, targets);
+                    const auto [distances, predecessors] = sssp(graph, sources[i]);
+                    matrix[i] = select_targets(distances, targets);
                 }
             }
         );
 
         return matrix;
-    }
-
-    std::vector<std::vector<int> > multi_source_bfs_lengths(
-        const std::size_t num_vertices,
-        const std::vector<int> &indptr,
-        const std::vector<int> &indices,
-        const std::vector<int> &sources,
-        const std::optional<std::vector<int> > &targets,
-        const int num_threads
-    ) {
-        const NativeCsrGraph graph(num_vertices, indptr, indices);
-        return multi_source_bfs_lengths(graph, sources, targets, num_threads);
-    }
-
-    std::vector<std::vector<double> > multi_source_sssp_lengths(
-        const std::size_t num_vertices,
-        const std::vector<int> &indptr,
-        const std::vector<int> &indices,
-        const std::optional<std::vector<double> > &weights,
-        const std::vector<int> &sources,
-        const std::optional<std::vector<int> > &targets,
-        const int num_threads
-    ) {
-        const NativeCsrGraph graph =
-                weights.has_value()
-                    ? NativeCsrGraph(num_vertices, indptr, indices, *weights)
-                    : NativeCsrGraph(num_vertices, indptr, indices);
-
-        return multi_source_sssp_lengths(graph, sources, targets, num_threads);
     }
 } // namespace gpupath

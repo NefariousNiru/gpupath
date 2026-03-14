@@ -227,11 +227,10 @@ def test_native_prepared_graph_weighted_properties(
 def test_bfs_parity_unweighted_graph(unweighted_graph: CSRGraph) -> None:
     cpu_engine = ReferencePathEngine()
     native_engine = NativePathEngine()
-    prepared = native_engine.prepare_graph(unweighted_graph)
 
     cpu_result = cpu_engine.bfs(unweighted_graph, 0)
     native_raw_result = native_engine.bfs(unweighted_graph, 0)
-    native_prepared_result = native_engine.bfs(prepared, 0)
+    native_prepared_result = native_engine.bfs(unweighted_graph, 0)
 
     assert native_raw_result.distances == cpu_result.distances
     assert native_raw_result.predecessors == cpu_result.predecessors
@@ -244,11 +243,10 @@ def test_bfs_parity_disconnected_unweighted_graph(
 ) -> None:
     cpu_engine = ReferencePathEngine()
     native_engine = NativePathEngine()
-    prepared = native_engine.prepare_graph(disconnected_unweighted_graph)
 
     cpu_result = cpu_engine.bfs(disconnected_unweighted_graph, 0)
     native_raw_result = native_engine.bfs(disconnected_unweighted_graph, 0)
-    native_prepared_result = native_engine.bfs(prepared, 0)
+    native_prepared_result = native_engine.bfs(disconnected_unweighted_graph, 0)
 
     assert native_raw_result.distances == cpu_result.distances
     assert native_raw_result.predecessors == cpu_result.predecessors
@@ -259,11 +257,10 @@ def test_bfs_parity_disconnected_unweighted_graph(
 def test_sssp_parity_weighted_graph(weighted_graph: CSRGraph) -> None:
     cpu_engine = ReferencePathEngine()
     native_engine = NativePathEngine()
-    prepared = native_engine.prepare_graph(weighted_graph)
 
     cpu_result = cpu_engine.sssp(weighted_graph, 0)
     native_raw_result = native_engine.sssp(weighted_graph, 0)
-    native_prepared_result = native_engine.sssp(prepared, 0)
+    native_prepared_result = native_engine.sssp(weighted_graph, 0)
 
     assert native_raw_result.distances == pytest.approx(cpu_result.distances)
     assert native_raw_result.predecessors == cpu_result.predecessors
@@ -276,11 +273,10 @@ def test_sssp_parity_disconnected_weighted_graph(
 ) -> None:
     cpu_engine = ReferencePathEngine()
     native_engine = NativePathEngine()
-    prepared = native_engine.prepare_graph(disconnected_weighted_graph)
 
     cpu_result = cpu_engine.sssp(disconnected_weighted_graph, 0)
     native_raw_result = native_engine.sssp(disconnected_weighted_graph, 0)
-    native_prepared_result = native_engine.sssp(prepared, 0)
+    native_prepared_result = native_engine.sssp(disconnected_weighted_graph, 0)
 
     assert native_raw_result.distances == pytest.approx(cpu_result.distances)
     assert native_raw_result.predecessors == cpu_result.predecessors
@@ -292,20 +288,18 @@ def test_prepared_bfs_preserves_invalid_source_contract(
     unweighted_graph: CSRGraph,
 ) -> None:
     engine = NativePathEngine()
-    prepared = engine.prepare_graph(unweighted_graph)
 
     with pytest.raises(ValueError, match="source 99 out of range"):
-        engine.bfs(prepared, 99)
+        engine.bfs(unweighted_graph, 99)
 
 
 def test_prepared_sssp_preserves_invalid_source_contract(
     weighted_graph: CSRGraph,
 ) -> None:
     engine = NativePathEngine()
-    prepared = engine.prepare_graph(weighted_graph)
 
     with pytest.raises(ValueError, match="source 99 out of range"):
-        engine.sssp(prepared, 99)
+        engine.sssp(weighted_graph, 99)
 
 
 # ---------------------------------------------------------------------------

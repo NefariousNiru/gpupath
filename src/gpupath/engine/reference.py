@@ -142,6 +142,7 @@ class ReferencePathEngine(PathEngine):
         targets: Sequence[int] | None = None,
         *,
         method: Literal["bmssp", "default"] = "default",
+        num_threads: int = 1,
     ) -> list[list[int]] | list[list[float]]:
         """Compute shortest-path lengths for multiple sources on *graph*.
 
@@ -159,6 +160,8 @@ class ReferencePathEngine(PathEngine):
                 returned row contains only distances to these targets, in the
                 same order.
             method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+            num_threads: Number of threads to use for computing (Reference Engine ignores this parameter)
+                        Specify it for C++; default uses all cores.
 
         Returns:
             A matrix of shortest-path lengths whose row order matches

@@ -9,69 +9,34 @@
 
 namespace gpupath {
     /**
-     * @brief Run Breadth-First Search from @p source on an unweighted CSR graph.
+     * @brief Run BFS from a source on a prepared native CSR graph.
      *
-     * Computes the shortest-hop distance and predecessor vertex for every
-     * vertex reachable from @p source. Unreachable vertices retain `-1`
-     * in both output arrays.
+     * This is the native single-source unweighted traversal entry point used by
+     * the Python native engine. The graph is assumed to have already passed CSR
+     * validation during construction of the @ref NativeCsrGraph object, so this
+     * function operates directly on native-resident CSR storage without rebuilding
+     * or revalidating the graph structure from Python inputs.
      *
-     * Expected CSR invariants:
-     * - `indptr.size() == num_vertices + 1`
-     * - `indptr[0] == 0`
-     * - `indptr` is non-decreasing
-     * - `indptr.back() == indices.size()`
-     * - every entry in @p indices is in `[0, num_vertices)`
+     * Semantics:
+     * - `distances[v]` is the minimum hop count from @p source to vertex @p v
+     * - `predecessors[v]` stores the vertex that first discovered @p v
+     * - unreachable vertices retain `-1` in both arrays
+     * - the source vertex retains predecessor `-1`
      *
      * Complexity:
      * - Time: O(V + E)
      * - Auxiliary space: O(V)
      *
-     * where V is @p num_vertices and E is `indices.size()`.
-     *
-     * @param num_vertices  Total number of vertices in the graph.
-     * @param indptr        CSR row-pointer array of length `num_vertices + 1`.
-     *                      `indptr[v]` and `indptr[v + 1]` delimit the neighbors
-     *                      of vertex @p v in @p indices.
-     * @param indices       Flat CSR neighbor array. Every entry must be a valid
-     *                      vertex id in `[0, num_vertices)`.
-     * @param source        Source vertex from which BFS starts. Must be in
-     *                      `[0, num_vertices)`.
-     *
-     * @return A `BfsResult` whose `distances[v]` holds the shortest-hop
-     *         distance from @p source to vertex @p v, and whose
-     *         `predecessors[v]` holds the vertex that first discovered @p v.
-     *         Both arrays have length @p num_vertices.
-     *
-     * @throws std::invalid_argument if:
-     *         - @p num_vertices is negative
-     *         - @p indptr has incorrect size
-     *         - @p indptr is empty
-     *         - @p indptr does not start at `0`
-     *         - @p indptr is not non-decreasing
-     *         - @p indptr.back() does not equal `indices.size()`
-     * @throws std::out_of_range if:
-     *         - @p source is outside `[0, num_vertices)`
-     *         - any neighbor index in @p indices is outside `[0, num_vertices)`
-     */
-    BfsResult bfs_unweighted(
-        std::size_t num_vertices,
-        const std::vector<int> &indptr,
-        const std::vector<int> &indices,
-        int source
-    );
-
-    /**
-     * @brief Run BFS from a source on a prepared native CSR graph.
-     *
-     * This overload reuses native-resident CSR storage and avoids rebuilding
-     * adjacency arrays from Python inputs on every call.
+     * where V is `graph.num_vertices()` and E is `graph.num_edges()`.
      *
      * @param graph Prepared native CSR graph.
-     * @param source Source vertex id in ``[0, graph.num_vertices())``.
+     * @param source Source vertex id in `[0, graph.num_vertices())`.
      *
-     * @return BFS traversal result containing hop distances and predecessors.
+     * @return A @ref BfsResult containing shortest-hop distances and predecessor
+     *         links for all vertices in the graph.
      *
-     * @throws std::out_of_range If ``source`` is out of range.
+     * @throws std::out_of_range If @p source is outside
+     *         `[0, graph.num_vertices())`.
      */
     [[nodiscard]] BfsResult bfs_unweighted(const NativeCsrGraph &graph, int source);
 } // namespace gpupath

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Literal, Sequence
 
 import gpupath._native as _native
@@ -40,18 +41,11 @@ class NativePathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            if isinstance(graph, NativeGraphHandle):
-                native_result = _native.bfs_unweighted(
-                    graph.native_graph,
-                    source,
-                )
-            else:
-                native_result = _native.bfs_unweighted(
-                    graph.num_vertices,
-                    graph.indptr,
-                    graph.indices,
-                    source,
-                )
+            prepared_g = self.prepare_graph(graph)
+            native_result = _native.bfs_unweighted(
+                prepared_g.native_graph,
+                source,
+            )
         except IndexError as exc:
             # Preserve Python engine contract parity for invalid source.
             raise ValueError(f"source {source} out of range") from exc
@@ -84,19 +78,11 @@ class NativePathEngine(PathEngine):
             ValueError: If *source* is outside ``[0, graph.num_vertices)``.
         """
         try:
-            if isinstance(graph, NativeGraphHandle):
-                native_result = _native.sssp(
-                    graph.native_graph,
-                    source,
-                )
-            else:
-                native_result = _native.sssp(
-                    graph.num_vertices,
-                    graph.indptr,
-                    graph.indices,
-                    graph.weights,
-                    source,
-                )
+            prepared_g = self.prepare_graph(graph)
+            native_result = _native.sssp(
+                prepared_g.native_graph,
+                source,
+            )
         except IndexError as exc:
             raise ValueError(f"source {source} out of range") from exc
 
@@ -112,6 +98,7 @@ class NativePathEngine(PathEngine):
         targets: Sequence[int] | None = None,
         *,
         method: Literal["bmssp", "default"] = "default",
+        num_threads: int = os.cpu_count(),
     ) -> list[list[int]] | list[list[float]]:
         """Compute shortest-path lengths for multiple sources on *graph*.
 
@@ -128,6 +115,8 @@ class NativePathEngine(PathEngine):
                 returned row.
             method: Algorithm selection for weighted graphs. BMSSP
                 (experimental) or Dijkstra.
+            num_threads: Number of threads to use for computing (python uses 1 regardless of input)
+                        Specify it for C++; default uses all cores.
 
         Returns:
             A matrix of shortest-path lengths whose row order matches
@@ -156,15 +145,14 @@ class NativePathEngine(PathEngine):
 
         if graph.is_weighted:
             return _native.multi_source_sssp_lengths(
-                prepared.native_graph,
-                source_list,
-                target_list,
+                prepared.native_graph, source_list, target_list, num_threads
             )
 
         return _native.multi_source_bfs_lengths(
             prepared.native_graph,
             source_list,
             target_list,
+            num_threads,
         )
 
     @staticmethod

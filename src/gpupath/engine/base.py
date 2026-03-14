@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from typing import Literal, Sequence
 
@@ -119,6 +120,7 @@ class PathEngine(ABC):
         targets: Sequence[int] | None = None,
         *,
         method: Literal["bmssp", "default"] = "default",
+        num_threads: int = os.cpu_count(),
     ) -> list[list[int]] | list[list[float]]:
         """Compute shortest-path lengths for multiple sources on *graph*.
 
@@ -144,6 +146,8 @@ class PathEngine(ABC):
                 column order must match this input order exactly. If omitted,
                 each row contains distances for all vertices in the graph.
             method: Algorithm selection for weighted graphs. BMSSP (Experimental) or Dijkstra
+            num_threads: Number of threads to use for computing (python uses 1 regardless of input)
+                        Specify it for C++; default uses all cores.
 
         Returns:
             A matrix of shortest-path lengths. For unweighted traversal, each
