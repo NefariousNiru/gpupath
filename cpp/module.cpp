@@ -3,12 +3,15 @@
 #include <optional>
 #include <string>
 #include <exception>
+#include <sstream>
 #include <stdexcept>
+#include <utility>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 #include "gpupath/bfs.hpp"
+#include "gpupath/cuda_bootstrap.hpp"
 #include "gpupath/multi_source_lengths.hpp"
 #include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
@@ -27,6 +30,22 @@ namespace py = pybind11;
  */
 static std::string version() {
     return "gpupath native bootstrap v1";
+}
+
+/**
+ * @brief Build a Python dictionary containing CUDA bootstrap information.
+ *
+ * This wraps the native CUDA bootstrap probe in Python-friendly types for
+ * early smoke testing.
+ *
+ * @return Python dict with CUDA availability and a raw native JSON payload.
+ */
+static py::dict cuda_info() {
+    py::dict out;
+    out["cuda_available"] = gpupath::cuda_available();
+    out["version_string"] = gpupath::cuda_version_string();
+    out["raw_json"] = gpupath::cuda_info_json();
+    return out;
 }
 
 /**
@@ -298,5 +317,25 @@ PYBIND11_MODULE(_native, m) {
         "Raises:\n"
         "    ValueError: If any explicit edge weight is negative.\n"
         "    IndexError: If any source or target vertex is out of range."
+    );
+
+    //  --- CUDA --------------------------------------------------------------------
+
+    m.def(
+        "cuda_available",
+        &gpupath::cuda_available,
+        "Return True if a CUDA-capable device/runtime is available."
+    );
+
+    m.def(
+        "cuda_version_string",
+        &gpupath::cuda_version_string,
+        "Return a human-readable CUDA bootstrap summary string."
+    );
+
+    m.def(
+        "cuda_info",
+        &cuda_info,
+        "Return CUDA bootstrap information as a Python dictionary."
     );
 }
