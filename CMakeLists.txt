@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.18)
-project(gpupath LANGUAGES CXX)
+project(gpupath LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(PYBIND11_FINDPYTHON ON)
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
@@ -15,9 +18,15 @@ pybind11_add_module(_native
         cpp/src/sssp.cpp
         cpp/src/native_csr_graph.cpp
         cpp/src/multi_source_lengths.cpp
+        cpp/src/cuda_bootstrap.cu
 )
 
 target_include_directories(_native PRIVATE cpp/include)
 target_compile_features(_native PRIVATE cxx_std_17)
+
+set_target_properties(_native PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES native
+)
 
 install(TARGETS _native DESTINATION gpupath)
