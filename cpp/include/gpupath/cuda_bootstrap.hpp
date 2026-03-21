@@ -2,36 +2,55 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace gpupath {
     /**
-     * @brief Return whether a CUDA-capable device/runtime is available.
+     * @brief Basic properties for one CUDA device.
+     */
+    struct CudaDeviceInfo {
+        int index = -1;
+        std::string name;
+        int major = 0;
+        int minor = 0;
+        std::size_t total_global_memory = 0;
+        int multi_processor_count = 0;
+    };
+
+    /**
+     * @brief Result of a lightweight CUDA runtime/bootstrap probe.
      *
-     * This performs a lightweight CUDA runtime probe and returns false instead
-     * of throwing if the runtime/device is unavailable.
+     * This is intentionally small. It is meant for environment validation,
+     * not full hardware introspection.
+     */
+    struct CudaBootstrapInfo {
+        bool cuda_available = false;
+        int status_code = -1;
+        std::string status_name;
+        std::string status_message;
+        int device_count = 0;
+        int runtime_version = 0;
+        int driver_version = 0;
+        std::optional<CudaDeviceInfo> primary_device;
+    };
+
+    /**
+     * @brief Query a lightweight snapshot of CUDA runtime/device availability.
      *
-     * @return True if at least one CUDA device is visible, otherwise false.
+     * This function is the canonical bootstrap probe for the native backend.
+     * It should remain lightweight and robust even on partially configured
+     * systems.
+     *
+     * @return Structured CUDA bootstrap information.
+     */
+    CudaBootstrapInfo query_cuda_bootstrap_info();
+
+    /**
+     * @brief Convenience helper indicating whether CUDA is usable.
+     *
+     * @return True if the runtime probe succeeded and at least one device is
+     *         visible, otherwise false.
      */
     bool cuda_available();
-
-    /**
-     * @brief Return a human-readable CUDA bootstrap summary string.
-     *
-     * Intended only for early smoke testing.
-     *
-     * @return Summary string describing CUDA runtime/device availability.
-     */
-    std::string cuda_version_string();
-
-    /**
-     * @brief Return structured CUDA environment information as a JSON string.
-     *
-     * The pybind layer can expose this as a Python dict by parsing/assembling
-     * fields directly, but keeping the native side simple is useful during
-     * bootstrap.
-     *
-     * @return JSON string describing CUDA runtime/device state.
-     */
-    std::string cuda_info_json();
 } // namespace gpupath

@@ -5,7 +5,6 @@
 #include <exception>
 #include <sstream>
 #include <stdexcept>
-#include <utility>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -33,19 +32,54 @@ static std::string version() {
 }
 
 /**
- * @brief Build a Python dictionary containing CUDA bootstrap information.
+ * @brief Convert native CUDA device info into a Python dictionary.
  *
- * This wraps the native CUDA bootstrap probe in Python-friendly types for
- * early smoke testing.
+ * @param info Native CUDA device info.
+ * @return Python dict with device properties.
+ */
+static py::dict to_python_dict(const gpupath::CudaDeviceInfo &info) {
+    py::dict out;
+    out["index"] = info.index;
+    out["name"] = info.name;
+    out["major"] = info.major;
+    out["minor"] = info.minor;
+    out["total_global_memory"] = info.total_global_memory;
+    out["multi_processor_count"] = info.multi_processor_count;
+    return out;
+}
+
+/**
+ * @brief Convert native CUDA bootstrap info into a Python dictionary.
  *
- * @return Python dict with CUDA availability and a raw native JSON payload.
+ * @param info Native CUDA bootstrap info.
+ * @return Python dict with bootstrap/runtime/device details.
+ */
+static py::dict to_python_dict(const gpupath::CudaBootstrapInfo &info) {
+    py::dict out;
+    out["cuda_available"] = info.cuda_available;
+    out["status_code"] = info.status_code;
+    out["status_name"] = info.status_name;
+    out["status_message"] = info.status_message;
+    out["device_count"] = info.device_count;
+    out["runtime_version"] = info.runtime_version;
+    out["driver_version"] = info.driver_version;
+
+    if (info.primary_device.has_value()) {
+        out["primary_device"] = to_python_dict(*info.primary_device);
+    } else {
+        out["primary_device"] = py::none();
+    }
+
+    return out;
+}
+
+/**
+ * @brief Query CUDA bootstrap information and expose it as a Python dict.
+ *
+ * @return Python dictionary containing CUDA bootstrap information.
  */
 static py::dict cuda_info() {
-    py::dict out;
-    out["cuda_available"] = gpupath::cuda_available();
-    out["version_string"] = gpupath::cuda_version_string();
-    out["raw_json"] = gpupath::cuda_info_json();
-    return out;
+    return to_python_dict(gpupath::query_cuda_bootstrap_info());
 }
 
 /**
@@ -328,14 +362,8 @@ PYBIND11_MODULE(_native, m) {
     );
 
     m.def(
-        "cuda_version_string",
-        &gpupath::cuda_version_string,
-        "Return a human-readable CUDA bootstrap summary string."
-    );
-
-    m.def(
         "cuda_info",
         &cuda_info,
-        "Return CUDA bootstrap information as a Python dictionary."
+        "Return structured CUDA bootstrap information."
     );
 }
