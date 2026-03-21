@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from gpupath._native import NativeCsrGraph as _NativeCsrGraph
+from gpupath.engine._prepared_graph_mixin import (
+    PreparedGraphHandleMixin,
+    build_prepared_graph,
+)
 from gpupath.graph import CSRGraph
 
 
 @dataclass(frozen=True, slots=True)
-class NativeGraphHandle:
+class NativeGraphHandle(PreparedGraphHandleMixin):
     """
     Prepared native graph handle for repeated path queries.
 
@@ -31,27 +35,7 @@ class NativeGraphHandle:
         Returns:
             NativeGraphHandle wrapping the native graph handle.
         """
-        if graph.weights is None:
-            native_graph = _NativeCsrGraph(
-                graph.num_vertices,
-                graph.indptr,
-                graph.indices,
-            )
-        else:
-            native_graph = _NativeCsrGraph(
-                graph.num_vertices,
-                graph.indptr,
-                graph.indices,
-                graph.weights,
-            )
-        return cls(graph=graph, native_graph=native_graph)
-
-    @property
-    def num_vertices(self) -> int:
-        """Return the number of vertices in the prepared graph."""
-        return self.graph.num_vertices
-
-    @property
-    def is_weighted(self) -> bool:
-        """Return whether the prepared graph has explicit edge weights."""
-        return self.graph.weights is not None
+        return cls(
+            graph=graph,
+            native_graph=build_prepared_graph(graph, _NativeCsrGraph),
+        )

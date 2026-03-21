@@ -14,6 +14,7 @@ Primary exports:
 - cost_matrix: batched source-target shortest path distances
 """
 
+from gpupath.cuda import cuda_available, cuda_info
 from gpupath.graph import CSRGraph
 from gpupath.query import (
     cost_matrix,
@@ -21,7 +22,6 @@ from gpupath.query import (
     shortest_path,
     shortest_path_lengths,
 )
-from gpupath.cuda import cuda_info, cuda_available
 
 __all__ = [
     "CSRGraph",
