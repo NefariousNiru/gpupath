@@ -3,12 +3,15 @@
 #include <optional>
 #include <string>
 #include <exception>
+#include <sstream>
 #include <stdexcept>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
 #include "gpupath/bfs.hpp"
+#include "gpupath/cuda_bootstrap.hpp"
+#include "gpupath/cuda_csr_graph.hpp"
 #include "gpupath/multi_source_lengths.hpp"
 #include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
@@ -27,6 +30,57 @@ namespace py = pybind11;
  */
 static std::string version() {
     return "gpupath native bootstrap v1";
+}
+
+/**
+ * @brief Convert native CUDA device info into a Python dictionary.
+ *
+ * @param info Native CUDA device info.
+ * @return Python dict with device properties.
+ */
+static py::dict to_python_dict(const gpupath::CudaDeviceInfo &info) {
+    py::dict out;
+    out["index"] = info.index;
+    out["name"] = info.name;
+    out["major"] = info.major;
+    out["minor"] = info.minor;
+    out["total_global_memory"] = info.total_global_memory;
+    out["multi_processor_count"] = info.multi_processor_count;
+    return out;
+}
+
+/**
+ * @brief Convert native CUDA bootstrap info into a Python dictionary.
+ *
+ * @param info Native CUDA bootstrap info.
+ * @return Python dict with bootstrap/runtime/device details.
+ */
+static py::dict to_python_dict(const gpupath::CudaBootstrapInfo &info) {
+    py::dict out;
+    out["cuda_available"] = info.cuda_available;
+    out["status_code"] = info.status_code;
+    out["status_name"] = info.status_name;
+    out["status_message"] = info.status_message;
+    out["device_count"] = info.device_count;
+    out["runtime_version"] = info.runtime_version;
+    out["driver_version"] = info.driver_version;
+
+    if (info.primary_device.has_value()) {
+        out["primary_device"] = to_python_dict(*info.primary_device);
+    } else {
+        out["primary_device"] = py::none();
+    }
+
+    return out;
+}
+
+/**
+ * @brief Query CUDA bootstrap information and expose it as a Python dict.
+ *
+ * @return Python dictionary containing CUDA bootstrap information.
+ */
+static py::dict cuda_info() {
+    return to_python_dict(gpupath::query_cuda_bootstrap_info());
 }
 
 /**
@@ -130,6 +184,75 @@ static void bind_native_csr_graph(py::module_ &m) {
             );
 }
 
+/**
+ * @brief Bind the CUDA prepared CSR graph type.
+ *
+ * This type is primarily an internal/native boundary object. It is exposed to
+ * Python so higher-level engine code can prepare a graph once and reuse it
+ * across repeated CUDA graph queries.
+ *
+ * At this stage we only expose construction and metadata. Raw device pointers
+ * remain internal to native/CUDA code and are not exposed to Python.
+ *
+ * @param m Pybind11 module handle.
+ */
+static void bind_cuda_csr_graph(py::module_ &m) {
+    py::class_<gpupath::CudaCsrGraph>(m, "CudaCsrGraph")
+            .def(
+                py::init<
+                    std::size_t,
+                    const std::vector<int> &,
+                    const std::vector<int> &>(),
+                py::arg("num_vertices"),
+                py::arg("indptr"),
+                py::arg("indices"),
+                R"pbdoc(
+                Construct an unweighted CUDA CSR graph.
+
+                Validation is performed once at construction, then CSR data is
+                uploaded to device memory.
+
+                Raises ValueError if the CSR structure is invalid.
+                Raises RuntimeError if CUDA allocation or transfer fails.
+                )pbdoc"
+            )
+            .def(
+                py::init<
+                    std::size_t,
+                    const std::vector<int> &,
+                    const std::vector<int> &,
+                    const std::vector<double> &>(),
+                py::arg("num_vertices"),
+                py::arg("indptr"),
+                py::arg("indices"),
+                py::arg("weights"),
+                R"pbdoc(
+                Construct a weighted CUDA CSR graph.
+
+                Validation is performed once at construction, then CSR data is
+                uploaded to device memory.
+
+                Raises ValueError if the CSR structure is invalid.
+                Raises RuntimeError if CUDA allocation or transfer fails.
+                )pbdoc"
+            )
+            .def_property_readonly(
+                "num_vertices",
+                &gpupath::CudaCsrGraph::num_vertices,
+                "Number of vertices in the graph."
+            )
+            .def_property_readonly(
+                "num_edges",
+                &gpupath::CudaCsrGraph::num_edges,
+                "Number of edges in the graph."
+            )
+            .def_property_readonly(
+                "is_weighted",
+                &gpupath::CudaCsrGraph::is_weighted,
+                "Whether the graph stores explicit edge weights."
+            );
+}
+
 // ---------------------------------------------------------------------------
 // Module definition
 // ---------------------------------------------------------------------------
@@ -194,6 +317,10 @@ PYBIND11_MODULE(_native, m) {
     // --- Native graph boundary type --------------------------------------
 
     bind_native_csr_graph(m);
+
+    // --- Cuda graph boundary type ----------------------------------------
+
+    bind_cuda_csr_graph(m);
 
     // --- Bootstrap helpers ------------------------------------------------
 
@@ -298,5 +425,19 @@ PYBIND11_MODULE(_native, m) {
         "Raises:\n"
         "    ValueError: If any explicit edge weight is negative.\n"
         "    IndexError: If any source or target vertex is out of range."
+    );
+
+    //  --- CUDA --------------------------------------------------------------------
+
+    m.def(
+        "cuda_available",
+        &gpupath::cuda_available,
+        "Return True if a CUDA-capable device/runtime is available."
+    );
+
+    m.def(
+        "cuda_info",
+        &cuda_info,
+        "Return structured CUDA bootstrap information."
     );
 }
