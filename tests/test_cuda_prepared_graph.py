@@ -74,3 +74,50 @@ def test_cuda_csr_graph_invalid_indptr_raises() -> None:
             [1, 2, 3, 5, 5],
             [1, 2, 2, 0, 3],
         )
+
+
+def test_cuda_graph_handle_weighted_can_be_prepared_once_and_reused() -> None:
+    graph = CSRGraph(
+        num_vertices=4,
+        indptr=[0, 2, 3, 5, 5],
+        indices=[1, 2, 2, 0, 3],
+        weights=[5.0, 6.0, 7.0, 8.0, 9.0],
+    )
+
+    handle = CudaGraphHandle.from_csr_graph(graph)
+
+    first_cuda_graph = handle.cuda_graph
+
+    assert handle.is_weighted is True
+    assert handle.cuda_graph.is_weighted is True
+    assert handle.cuda_graph is first_cuda_graph
+    assert handle.cuda_graph.num_edges == 5
+
+
+def test_cuda_graph_handle_can_be_prepared_once_and_reused() -> None:
+    graph = CSRGraph(
+        num_vertices=4,
+        indptr=[0, 2, 3, 5, 5],
+        indices=[1, 2, 2, 0, 3],
+    )
+
+    handle = CudaGraphHandle.from_csr_graph(graph)
+
+    first_cuda_graph = handle.cuda_graph
+    first_python_graph = handle.graph
+
+    assert handle.num_vertices == 4
+    assert handle.is_weighted is False
+    assert handle.cuda_graph.num_vertices == 4
+    assert handle.cuda_graph.num_edges == 5
+    assert handle.cuda_graph.is_weighted is False
+
+    # Reuse the same prepared handle again without rebuilding.
+    assert handle.graph is first_python_graph
+    assert handle.cuda_graph is first_cuda_graph
+
+    assert handle.num_vertices == 4
+    assert handle.is_weighted is False
+    assert handle.cuda_graph.num_vertices == 4
+    assert handle.cuda_graph.num_edges == 5
+    assert handle.cuda_graph.is_weighted is False
