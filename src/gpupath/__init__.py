@@ -21,6 +21,7 @@ from gpupath.query import (
     shortest_path,
     shortest_path_lengths,
 )
+from gpupath.cuda import cuda_info, cuda_available
 
 __all__ = [
     "CSRGraph",
@@ -28,4 +29,6 @@ __all__ = [
     "predecessors",
     "shortest_path",
     "cost_matrix",
+    "cuda_info",
+    "cuda_available",
 ]
