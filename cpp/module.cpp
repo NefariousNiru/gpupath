@@ -11,6 +11,7 @@
 
 #include "gpupath/bfs.hpp"
 #include "gpupath/cuda_bootstrap.hpp"
+#include "gpupath/cuda_csr_graph.hpp"
 #include "gpupath/multi_source_lengths.hpp"
 #include "gpupath/native_csr_graph.hpp"
 #include "gpupath/sssp.hpp"
@@ -183,6 +184,75 @@ static void bind_native_csr_graph(py::module_ &m) {
             );
 }
 
+/**
+ * @brief Bind the CUDA prepared CSR graph type.
+ *
+ * This type is primarily an internal/native boundary object. It is exposed to
+ * Python so higher-level engine code can prepare a graph once and reuse it
+ * across repeated CUDA graph queries.
+ *
+ * At this stage we only expose construction and metadata. Raw device pointers
+ * remain internal to native/CUDA code and are not exposed to Python.
+ *
+ * @param m Pybind11 module handle.
+ */
+static void bind_cuda_csr_graph(py::module_ &m) {
+    py::class_<gpupath::CudaCsrGraph>(m, "CudaCsrGraph")
+            .def(
+                py::init<
+                    std::size_t,
+                    const std::vector<int> &,
+                    const std::vector<int> &>(),
+                py::arg("num_vertices"),
+                py::arg("indptr"),
+                py::arg("indices"),
+                R"pbdoc(
+                Construct an unweighted CUDA CSR graph.
+
+                Validation is performed once at construction, then CSR data is
+                uploaded to device memory.
+
+                Raises ValueError if the CSR structure is invalid.
+                Raises RuntimeError if CUDA allocation or transfer fails.
+                )pbdoc"
+            )
+            .def(
+                py::init<
+                    std::size_t,
+                    const std::vector<int> &,
+                    const std::vector<int> &,
+                    const std::vector<double> &>(),
+                py::arg("num_vertices"),
+                py::arg("indptr"),
+                py::arg("indices"),
+                py::arg("weights"),
+                R"pbdoc(
+                Construct a weighted CUDA CSR graph.
+
+                Validation is performed once at construction, then CSR data is
+                uploaded to device memory.
+
+                Raises ValueError if the CSR structure is invalid.
+                Raises RuntimeError if CUDA allocation or transfer fails.
+                )pbdoc"
+            )
+            .def_property_readonly(
+                "num_vertices",
+                &gpupath::CudaCsrGraph::num_vertices,
+                "Number of vertices in the graph."
+            )
+            .def_property_readonly(
+                "num_edges",
+                &gpupath::CudaCsrGraph::num_edges,
+                "Number of edges in the graph."
+            )
+            .def_property_readonly(
+                "is_weighted",
+                &gpupath::CudaCsrGraph::is_weighted,
+                "Whether the graph stores explicit edge weights."
+            );
+}
+
 // ---------------------------------------------------------------------------
 // Module definition
 // ---------------------------------------------------------------------------
@@ -247,6 +317,10 @@ PYBIND11_MODULE(_native, m) {
     // --- Native graph boundary type --------------------------------------
 
     bind_native_csr_graph(m);
+
+    // --- Cuda graph boundary type ----------------------------------------
+
+    bind_cuda_csr_graph(m);
 
     // --- Bootstrap helpers ------------------------------------------------
 
