@@ -2,11 +2,14 @@
 
 #include "gpupath/cuda_bfs.hpp"
 #include "gpupath/cuda_utils.hpp"
+#include "gpupath/cuda_bfs_planner.hpp"
+#include "gpupath/cuda_graph_profile.hpp"
 
 #include <cuda_runtime.h>
 
+#include <algorithm>
 #include <stdexcept>
-
+#include <vector>
 
 namespace gpupath {
     namespace {
@@ -29,8 +32,8 @@ namespace gpupath {
         /**
          * @brief Number of CUDA threads per block for BFS kernels.
          *
-         * This must be a multiple of @ref kWarpSize because the expansion kernel
-         * derives warp ids and lane ids directly from the linear thread id.
+         * This must be a multiple of @ref kWarpSize because the warp-expansion
+         * kernel derives warp ids and lane ids directly from the linear thread id.
          */
         constexpr int kThreadsPerBlock = 256;
 
@@ -84,6 +87,47 @@ namespace gpupath {
         }
 
         /**
+         * @brief Expand one BFS level using thread-mapped frontier processing.
+         *
+         * Mapping strategy:
+         * - one thread is assigned to one frontier vertex
+         * - that thread scans the full adjacency list of the frontier vertex
+         *
+         * This policy is often a better fit for tiny frontiers and low-degree
+         * graphs where warp-cooperative processing wastes many lanes.
+         */
+        __global__ void bfs_expand_thread_kernel(
+            const int *indptr,
+            const int *indices,
+            const int *curr_frontier,
+            const int curr_count,
+            int *next_frontier,
+            int *next_count,
+            int *distances,
+            int *predecessors,
+            const int level
+        ) {
+            const int tid = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+
+            if (tid >= curr_count) {
+                return;
+            }
+
+            const int u = curr_frontier[tid];
+            const int start = indptr[u];
+            const int end = indptr[u + 1];
+
+            for (int edge_idx = start; edge_idx < end; ++edge_idx) {
+                if (const int v = indices[edge_idx]; atomicCAS(&distances[v], -1, level + 1) == -1) {
+                    predecessors[v] = u;
+
+                    const int slot = atomicAdd(next_count, 1);
+                    next_frontier[slot] = v;
+                }
+            }
+        }
+
+        /**
          * @brief Expand one BFS level using warp-cooperative frontier processing.
          *
          * Mapping strategy:
@@ -109,18 +153,8 @@ namespace gpupath {
          * Notes:
          * - predecessor choices may differ from serial CPU BFS when multiple
          *   same-level parents are valid
-         * - this kernel is not guaranteed to outperform the naive version on
-         *   very low-degree graphs
-         *
-         * @param indptr Device CSR row-pointer array.
-         * @param indices Device CSR column-index array.
-         * @param curr_frontier Device buffer containing the current frontier.
-         * @param curr_count Number of vertices in the current frontier.
-         * @param next_frontier Device output buffer for the next frontier.
-         * @param next_count Device counter for the next frontier size.
-         * @param distances Device BFS distance array.
-         * @param predecessors Device BFS predecessor array.
-         * @param level Current BFS level being expanded.
+         * - this kernel is not guaranteed to outperform the thread-mapped version
+         *   on very low-degree graphs
          */
         __global__ void bfs_expand_warp_kernel(
             const int *indptr,
@@ -153,6 +187,65 @@ namespace gpupath {
                     next_frontier[slot] = v;
                 }
             }
+        }
+
+        /**
+         * @brief Launch the selected traversal policy for one BFS level.
+         */
+        void launch_bfs_level(
+            const TraversalPolicy traversal,
+            const CudaCsrGraph &graph,
+            const int *d_curr_frontier,
+            const int curr_count,
+            int *d_next_frontier,
+            int *d_next_count,
+            int *d_distances,
+            int *d_predecessors,
+            const int level
+        ) {
+            switch (traversal) {
+                case TraversalPolicy::ThreadMapped: {
+                    const int blocks = (curr_count + kThreadsPerBlock - 1) / kThreadsPerBlock;
+
+                    bfs_expand_thread_kernel<<<blocks, kThreadsPerBlock>>>(
+                        graph.indptr_data(),
+                        graph.indices_data(),
+                        d_curr_frontier,
+                        curr_count,
+                        d_next_frontier,
+                        d_next_count,
+                        d_distances,
+                        d_predecessors,
+                        level
+                    );
+
+                    cuda::throw_if_last_error("bfs_expand_thread_kernel launch");
+                    return;
+                }
+
+                case TraversalPolicy::WarpMapped:
+                case TraversalPolicy::HybridMapped: {
+                    const int total_threads = curr_count * kWarpSize;
+                    const int blocks = (total_threads + kThreadsPerBlock - 1) / kThreadsPerBlock;
+
+                    bfs_expand_warp_kernel<<<blocks, kThreadsPerBlock>>>(
+                        graph.indptr_data(),
+                        graph.indices_data(),
+                        d_curr_frontier,
+                        curr_count,
+                        d_next_frontier,
+                        d_next_count,
+                        d_distances,
+                        d_predecessors,
+                        level
+                    );
+
+                    cuda::throw_if_last_error("bfs_expand_warp_kernel launch");
+                    return;
+                }
+            }
+
+            throw std::runtime_error("unsupported TraversalPolicy in launch_bfs_level");
         }
     } // namespace
 
@@ -190,6 +283,8 @@ namespace gpupath {
             cuda::synchronize_or_throw("bfs_init_kernel synchronize");
         }
 
+        const GraphProfile &graph_profile = graph.profile();
+
         int h_curr_count = 1;
         int level = 0;
 
@@ -199,12 +294,20 @@ namespace gpupath {
                 "cudaMemsetAsync(next_count)"
             );
 
-            const int total_threads = h_curr_count * kWarpSize;
-            const int blocks = (total_threads + kThreadsPerBlock - 1) / kThreadsPerBlock;
+            const FrontierStats frontier_stats = make_frontier_stats(
+                graph_profile,
+                level,
+                h_curr_count
+            );
 
-            bfs_expand_warp_kernel<<<blocks, kThreadsPerBlock>>>(
-                graph.indptr_data(),
-                graph.indices_data(),
+            const BfsExecutionPlan plan = choose_bfs_plan(
+                graph_profile,
+                frontier_stats
+            );
+
+            launch_bfs_level(
+                plan.traversal,
+                graph,
                 d_curr_frontier.get(),
                 h_curr_count,
                 d_next_frontier.get(),
@@ -213,8 +316,6 @@ namespace gpupath {
                 d_predecessors.get(),
                 level
             );
-
-            cuda::throw_if_last_error("bfs_expand_warp_kernel launch");
 
             int h_next_count = 0;
             cuda::throw_if_error(

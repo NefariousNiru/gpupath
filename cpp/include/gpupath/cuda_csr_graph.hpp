@@ -3,6 +3,7 @@
 #pragma once
 
 #include "gpupath/cuda_utils.hpp"
+#include "gpupath/cuda_graph_profile.hpp"
 
 #include <vector>
 
@@ -96,6 +97,19 @@ namespace gpupath {
          */
         [[nodiscard]] const double *weights_data() const noexcept;
 
+        /**
+         * @brief Return the static host-side graph profile used by planners.
+         */
+        [[nodiscard]] const GraphProfile &profile() const noexcept;
+
+        /**
+         * @brief Return the host CSR row-pointer cache.
+         *
+         * Internal/planner use only. This exists to support frontier profiling
+         * without copying the full CSR structure back from device memory.
+         */
+        [[nodiscard]] const std::vector<int> &host_indptr() const noexcept;
+
     private:
         static void validate(
             std::size_t num_vertices,
@@ -118,5 +132,8 @@ namespace gpupath {
         cuda::DeviceBuffer<int> d_indptr_;
         cuda::DeviceBuffer<int> d_indices_;
         cuda::DeviceBuffer<double> d_weights_;
+
+        std::vector<int> h_indptr_;
+        GraphProfile profile_{};
     };
 } // namespace gpupath

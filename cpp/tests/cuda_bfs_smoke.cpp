@@ -1,7 +1,9 @@
 // file: cpp/tests/cuda_bfs_smoke.cpp
 
 #include "gpupath/cuda_bfs.hpp"
+#include "gpupath/cuda_bfs_planner.hpp"
 #include "gpupath/cuda_csr_graph.hpp"
+#include "gpupath/cuda_graph_profile.hpp"
 
 #include <cassert>
 #include <iostream>
@@ -97,11 +99,113 @@ namespace {
         try {
             [[maybe_unused]] const gpupath::BfsResult result =
                 gpupath::cuda_bfs_unweighted(graph, 0);
-        } catch (const std::invalid_argument&) {
+        } catch (const std::invalid_argument &) {
             threw = true;
         }
 
         assert(threw);
+    }
+
+    void test_planner_selects_thread_mapped_for_small_low_degree_frontier() {
+        const gpupath::GraphProfile graph_profile{
+            1000,   // num_vertices
+            3000,   // num_edges
+            3.0,    // average_degree
+            12,     // max_degree
+            2,      // degree_p50
+            5,      // degree_p90
+            8,      // degree_p99
+            500,    // bucket_deg_0_2
+            400,    // bucket_deg_3_8
+            100,    // bucket_deg_9_32
+            0,      // bucket_deg_33_256
+            0       // bucket_deg_257_plus
+        };
+
+        const gpupath::FrontierStats frontier_stats{
+            2,      // level
+            24,     // frontier_size
+            0,      // next_frontier_size
+            72,     // frontier_edges_scanned
+            3.0,    // average_frontier_degree
+            8,      // max_frontier_degree
+            0.0,    // visited_fraction
+            0.0     // discovery_efficiency
+        };
+
+        const gpupath::BfsExecutionPlan plan =
+            gpupath::choose_bfs_plan(graph_profile, frontier_stats);
+
+        assert(plan.traversal == gpupath::TraversalPolicy::ThreadMapped);
+        assert(plan.frontier == gpupath::FrontierPolicy::GlobalAtomicQueue);
+    }
+
+    void test_planner_selects_warp_mapped_for_large_high_degree_frontier() {
+        const gpupath::GraphProfile graph_profile{
+            100000, // num_vertices
+            5000000,// num_edges
+            50.0,   // average_degree
+            4096,   // max_degree
+            12,     // degree_p50
+            96,     // degree_p90
+            512,    // degree_p99
+            1000,   // bucket_deg_0_2
+            5000,   // bucket_deg_3_8
+            25000,  // bucket_deg_9_32
+            50000,  // bucket_deg_33_256
+            19000   // bucket_deg_257_plus
+        };
+
+        const gpupath::FrontierStats frontier_stats{
+            5,       // level
+            5000,    // frontier_size
+            0,       // next_frontier_size
+            250000,  // frontier_edges_scanned
+            50.0,    // average_frontier_degree
+            2048,    // max_frontier_degree
+            0.0,     // visited_fraction
+            0.0      // discovery_efficiency
+        };
+
+        const gpupath::BfsExecutionPlan plan =
+            gpupath::choose_bfs_plan(graph_profile, frontier_stats);
+
+        assert(plan.traversal == gpupath::TraversalPolicy::WarpMapped);
+        assert(plan.frontier == gpupath::FrontierPolicy::GlobalAtomicQueue);
+    }
+
+    void test_planner_selects_warp_mapped_for_extreme_skew() {
+        const gpupath::GraphProfile graph_profile{
+            10000,   // num_vertices
+            200000,  // num_edges
+            20.0,    // average_degree
+            5000,    // max_degree
+            4,       // degree_p50
+            16,      // degree_p90
+            128,     // degree_p99
+            2000,    // bucket_deg_0_2
+            4000,    // bucket_deg_3_8
+            2500,    // bucket_deg_9_32
+            1200,    // bucket_deg_33_256
+            300      // bucket_deg_257_plus
+        };
+
+        const gpupath::FrontierStats frontier_stats{
+            3,      // level
+            64,     // frontier_size
+            0,      // next_frontier_size
+            256,    // frontier_edges_scanned
+            4.0,    // average_frontier_degree
+            4096,   // max_frontier_degree
+            0.0,    // visited_fraction
+            0.0     // discovery_efficiency
+        };
+
+        const gpupath::BfsExecutionPlan plan =
+            gpupath::choose_bfs_plan(graph_profile, frontier_stats);
+
+        assert(plan.traversal == gpupath::TraversalPolicy::WarpMapped);
+        assert(plan.frontier == gpupath::FrontierPolicy::GlobalAtomicQueue);
     }
 } // namespace
 
@@ -114,6 +218,15 @@ int main() {
 
     test_weighted_graph_rejected();
     std::cout << "cuda_bfs_smoke: weighted rejection case passed\n";
+
+    test_planner_selects_thread_mapped_for_small_low_degree_frontier();
+    std::cout << "cuda_bfs_smoke: planner thread-mapped case passed\n";
+
+    test_planner_selects_warp_mapped_for_large_high_degree_frontier();
+    std::cout << "cuda_bfs_smoke: planner warp-mapped large/high-degree case passed\n";
+
+    test_planner_selects_warp_mapped_for_extreme_skew();
+    std::cout << "cuda_bfs_smoke: planner warp-mapped skew case passed\n";
 
     std::cout << "cuda_bfs_smoke passed\n";
     return 0;

@@ -21,8 +21,11 @@ namespace gpupath {
           num_edges_(indices.size()),
           is_weighted_(false),
           d_indptr_(indptr.size()),
-          d_indices_(indices.size()) {
+          d_indices_(indices.size()),
+          h_indptr_(indptr) {
         validate(num_vertices, indptr, indices);
+
+        profile_ = build_graph_profile(num_vertices, indptr);
 
         cuda::throw_if_error(
             cudaMemcpy(
@@ -58,8 +61,11 @@ namespace gpupath {
           is_weighted_(true),
           d_indptr_(indptr.size()),
           d_indices_(indices.size()),
-          d_weights_(weights.size()) {
+          d_weights_(weights.size()),
+          h_indptr_(indptr) {
         validate(num_vertices, indptr, indices, weights);
+
+        profile_ = build_graph_profile(num_vertices, indptr);
 
         cuda::throw_if_error(
             cudaMemcpy(
@@ -122,6 +128,14 @@ namespace gpupath {
 
     const double *CudaCsrGraph::weights_data() const noexcept {
         return is_weighted_ ? d_weights_.get() : nullptr;
+    }
+
+    const GraphProfile &CudaCsrGraph::profile() const noexcept {
+        return profile_;
+    }
+
+    const std::vector<int> &CudaCsrGraph::host_indptr() const noexcept {
+        return h_indptr_;
     }
 
     /* ============================================================================
