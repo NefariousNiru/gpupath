@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include "gpupath/native_csr_graph.hpp"
 #include "gpupath/types.hpp"
 

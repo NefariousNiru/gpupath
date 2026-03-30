@@ -3,7 +3,6 @@
 #include "gpupath/multi_source_lengths.hpp"
 
 #include <algorithm>
-#include <cstddef>
 #include <exception>
 #include <mutex>
 #include <optional>

@@ -1,62 +1,17 @@
-// file: cuda_csr_graph.cu
+// file: cpp/src/cuda_csr_graph.cu
 
 #include "gpupath/cuda_csr_graph.hpp"
+#include "gpupath/cuda_utils.hpp"
 
 #include <cuda_runtime.h>
 
-#include <sstream>
 #include <stdexcept>
 
 namespace gpupath {
-    namespace {
-        /* ============================================================================
-         * CUDA Helpers
-         * ========================================================================== */
-
-        /**
-         * @brief Check a CUDA runtime call and throw on failure.
-         *
-         * CUDA APIs return status codes instead of throwing exceptions. This helper
-         * converts a failing CUDA status into a readable std::runtime_error.
-         *
-         * @param status CUDA runtime return code.
-         * @param operation Human-readable operation name.
-         *
-         * @throws std::runtime_error If @p status is not cudaSuccess.
-         */
-        void throw_if_cuda_error(
-            const cudaError_t status,
-            const char *operation
-        ) {
-            if (status == cudaSuccess) {
-                return;
-            }
-
-            std::ostringstream oss;
-            oss << operation
-                    << " failed: "
-                    << cudaGetErrorName(status)
-                    << " - "
-                    << cudaGetErrorString(status);
-
-            throw std::runtime_error(oss.str());
-        }
-    } // namespace
-
     /* ============================================================================
-     * Constructors and Destructor
+     * Constructors
      * ========================================================================== */
 
-    /**
-     * @brief Construct an unweighted GPU-resident CSR graph.
-     *
-     * This constructor:
-     * 1. validates the host CSR structure
-     * 2. allocates device buffers
-     * 3. copies host CSR arrays to device memory
-     *
-     * The host vectors are not stored. They are only used as upload inputs.
-     */
     CudaCsrGraph::CudaCsrGraph(
         const std::size_t num_vertices,
         const std::vector<int> &indptr,
@@ -64,53 +19,34 @@ namespace gpupath {
     )
         : num_vertices_(num_vertices),
           num_edges_(indices.size()),
-          is_weighted_(false) {
+          is_weighted_(false),
+          d_indptr_(indptr.size()),
+          d_indices_(indices.size()) {
         validate(num_vertices, indptr, indices);
 
-        throw_if_cuda_error(
-            cudaMalloc(reinterpret_cast<void **>(&d_indptr_), indptr.size() * sizeof(int)),
-            "cudaMalloc(d_indptr_)"
+        cuda::throw_if_error(
+            cudaMemcpy(
+                d_indptr_.get(),
+                indptr.data(),
+                indptr.size() * sizeof(int),
+                cudaMemcpyHostToDevice
+            ),
+            "cudaMemcpy(d_indptr_)"
         );
 
-        try {
-            throw_if_cuda_error(
-                cudaMalloc(reinterpret_cast<void **>(&d_indices_), indices.size() * sizeof(int)),
-                "cudaMalloc(d_indices_)"
-            );
-
-            throw_if_cuda_error(
+        if (!indices.empty()) {
+            cuda::throw_if_error(
                 cudaMemcpy(
-                    d_indptr_,
-                    indptr.data(),
-                    indptr.size() * sizeof(int),
+                    d_indices_.get(),
+                    indices.data(),
+                    indices.size() * sizeof(int),
                     cudaMemcpyHostToDevice
                 ),
-                "cudaMemcpy(d_indptr_)"
+                "cudaMemcpy(d_indices_)"
             );
-
-            if (!indices.empty()) {
-                throw_if_cuda_error(
-                    cudaMemcpy(
-                        d_indices_,
-                        indices.data(),
-                        indices.size() * sizeof(int),
-                        cudaMemcpyHostToDevice
-                    ),
-                    "cudaMemcpy(d_indices_)"
-                );
-            }
-        } catch (...) {
-            release();
-            throw;
         }
     }
 
-    /**
-     * @brief Construct a weighted GPU-resident CSR graph.
-     *
-     * This constructor performs the same upload flow as the unweighted version,
-     * plus allocation and upload of the weights array.
-     */
     CudaCsrGraph::CudaCsrGraph(
         const std::size_t num_vertices,
         const std::vector<int> &indptr,
@@ -119,114 +55,45 @@ namespace gpupath {
     )
         : num_vertices_(num_vertices),
           num_edges_(indices.size()),
-          is_weighted_(true) {
+          is_weighted_(true),
+          d_indptr_(indptr.size()),
+          d_indices_(indices.size()),
+          d_weights_(weights.size()) {
         validate(num_vertices, indptr, indices, weights);
 
-        throw_if_cuda_error(
-            cudaMalloc(reinterpret_cast<void **>(&d_indptr_), indptr.size() * sizeof(int)),
-            "cudaMalloc(d_indptr_)"
+        cuda::throw_if_error(
+            cudaMemcpy(
+                d_indptr_.get(),
+                indptr.data(),
+                indptr.size() * sizeof(int),
+                cudaMemcpyHostToDevice
+            ),
+            "cudaMemcpy(d_indptr_)"
         );
 
-        try {
-            throw_if_cuda_error(
-                cudaMalloc(reinterpret_cast<void **>(&d_indices_), indices.size() * sizeof(int)),
-                "cudaMalloc(d_indices_)"
-            );
-
-            throw_if_cuda_error(
-                cudaMalloc(reinterpret_cast<void **>(&d_weights_), weights.size() * sizeof(double)),
-                "cudaMalloc(d_weights_)"
-            );
-
-            throw_if_cuda_error(
+        if (!indices.empty()) {
+            cuda::throw_if_error(
                 cudaMemcpy(
-                    d_indptr_,
-                    indptr.data(),
-                    indptr.size() * sizeof(int),
+                    d_indices_.get(),
+                    indices.data(),
+                    indices.size() * sizeof(int),
                     cudaMemcpyHostToDevice
                 ),
-                "cudaMemcpy(d_indptr_)"
+                "cudaMemcpy(d_indices_)"
             );
-
-            if (!indices.empty()) {
-                throw_if_cuda_error(
-                    cudaMemcpy(
-                        d_indices_,
-                        indices.data(),
-                        indices.size() * sizeof(int),
-                        cudaMemcpyHostToDevice
-                    ),
-                    "cudaMemcpy(d_indices_)"
-                );
-            }
-
-            if (!weights.empty()) {
-                throw_if_cuda_error(
-                    cudaMemcpy(
-                        d_weights_,
-                        weights.data(),
-                        weights.size() * sizeof(double),
-                        cudaMemcpyHostToDevice
-                    ),
-                    "cudaMemcpy(d_weights_)"
-                );
-            }
-        } catch (...) {
-            release();
-            throw;
-        }
-    }
-
-    /**
-     * @brief Destroy the graph and free owned device buffers.
-     */
-    CudaCsrGraph::~CudaCsrGraph() {
-        release();
-    }
-
-    /**
-     * @brief Move-construct by transferring device-buffer ownership.
-     */
-    CudaCsrGraph::CudaCsrGraph(CudaCsrGraph &&other) noexcept
-        : num_vertices_(other.num_vertices_),
-          num_edges_(other.num_edges_),
-          is_weighted_(other.is_weighted_),
-          d_indptr_(other.d_indptr_),
-          d_indices_(other.d_indices_),
-          d_weights_(other.d_weights_) {
-        other.num_vertices_ = 0;
-        other.num_edges_ = 0;
-        other.is_weighted_ = false;
-        other.d_indptr_ = nullptr;
-        other.d_indices_ = nullptr;
-        other.d_weights_ = nullptr;
-    }
-
-    /**
-     * @brief Move-assign by releasing current buffers and taking ownership from other.
-     */
-    CudaCsrGraph &CudaCsrGraph::operator=(CudaCsrGraph &&other) noexcept {
-        if (this == &other) {
-            return *this;
         }
 
-        release();
-
-        num_vertices_ = other.num_vertices_;
-        num_edges_ = other.num_edges_;
-        is_weighted_ = other.is_weighted_;
-        d_indptr_ = other.d_indptr_;
-        d_indices_ = other.d_indices_;
-        d_weights_ = other.d_weights_;
-
-        other.num_vertices_ = 0;
-        other.num_edges_ = 0;
-        other.is_weighted_ = false;
-        other.d_indptr_ = nullptr;
-        other.d_indices_ = nullptr;
-        other.d_weights_ = nullptr;
-
-        return *this;
+        if (!weights.empty()) {
+            cuda::throw_if_error(
+                cudaMemcpy(
+                    d_weights_.get(),
+                    weights.data(),
+                    weights.size() * sizeof(double),
+                    cudaMemcpyHostToDevice
+                ),
+                "cudaMemcpy(d_weights_)"
+            );
+        }
     }
 
     /* ============================================================================
@@ -246,24 +113,21 @@ namespace gpupath {
     }
 
     const int *CudaCsrGraph::indptr_data() const noexcept {
-        return d_indptr_;
+        return d_indptr_.get();
     }
 
     const int *CudaCsrGraph::indices_data() const noexcept {
-        return d_indices_;
+        return d_indices_.get();
     }
 
     const double *CudaCsrGraph::weights_data() const noexcept {
-        return d_weights_;
+        return is_weighted_ ? d_weights_.get() : nullptr;
     }
 
     /* ============================================================================
      * Validation
      * ========================================================================== */
 
-    /**
-     * @brief Validate unweighted host-side CSR invariants before GPU upload.
-     */
     void CudaCsrGraph::validate(
         const std::size_t num_vertices,
         const std::vector<int> &indptr,
@@ -302,9 +166,6 @@ namespace gpupath {
         }
     }
 
-    /**
-     * @brief Validate weighted host-side CSR invariants before GPU upload.
-     */
     void CudaCsrGraph::validate(
         const std::size_t num_vertices,
         const std::vector<int> &indptr,
@@ -316,38 +177,5 @@ namespace gpupath {
         if (weights.size() != indices.size()) {
             throw std::invalid_argument("weights size must equal indices size");
         }
-    }
-
-    /* ============================================================================
-     * Private Helpers
-     * ========================================================================== */
-
-    /**
-     * @brief Free all owned device buffers and reset object state.
-     *
-     * Shared cleanup path for:
-     * - destructor
-     * - move assignment
-     * - constructor failure recovery
-     */
-    void CudaCsrGraph::release() noexcept {
-        if (d_weights_ != nullptr) {
-            cudaFree(d_weights_);
-            d_weights_ = nullptr;
-        }
-
-        if (d_indices_ != nullptr) {
-            cudaFree(d_indices_);
-            d_indices_ = nullptr;
-        }
-
-        if (d_indptr_ != nullptr) {
-            cudaFree(d_indptr_);
-            d_indptr_ = nullptr;
-        }
-
-        num_vertices_ = 0;
-        num_edges_ = 0;
-        is_weighted_ = false;
     }
 } // namespace gpupath

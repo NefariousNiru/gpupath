@@ -11,6 +11,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(PYBIND11_FINDPYTHON ON)
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 
 # Default ON for local development.
 # Configure with -DBUILD_TESTING=OFF to skip building/registering tests for prod.
@@ -24,10 +25,12 @@ add_library(gpupath_native_objs OBJECT
         cpp/src/multi_source_lengths.cpp
         cpp/src/cuda_bootstrap.cu
         cpp/src/cuda_csr_graph.cu
+        cpp/src/cuda_bfs.cu
 )
 
 # Compile to package gpupath_native_objs used by pybind
 target_include_directories(gpupath_native_objs PRIVATE cpp/include)
+target_include_directories(gpupath_native_objs PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
 target_compile_features(gpupath_native_objs PRIVATE cxx_std_17)
 set_target_properties(gpupath_native_objs PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
@@ -42,6 +45,7 @@ pybind11_add_module(_native
 
 # Compile to package _native used by Python to import
 target_include_directories(_native PRIVATE cpp/include)
+target_include_directories(_native PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
 target_compile_features(_native PRIVATE cxx_std_17)
 set_target_properties(_native PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON

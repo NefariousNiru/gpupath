@@ -3,7 +3,6 @@
 #include <optional>
 #include <string>
 #include <exception>
-#include <sstream>
 #include <stdexcept>
 
 #include <pybind11/pybind11.h>

@@ -1,8 +1,9 @@
-// file: cuda_csr_graph.hpp
+// file: cpp/include/gpupath/cuda_csr_graph.hpp
 
 #pragma once
 
-#include <cstddef>
+#include "gpupath/cuda_utils.hpp"
+
 #include <vector>
 
 namespace gpupath {
@@ -53,33 +54,24 @@ namespace gpupath {
             const std::vector<double> &weights
         );
 
-        ~CudaCsrGraph();
+        ~CudaCsrGraph() = default;
 
         CudaCsrGraph(const CudaCsrGraph &) = delete;
 
-        CudaCsrGraph(CudaCsrGraph &&other) noexcept;
-
         CudaCsrGraph &operator=(const CudaCsrGraph &) = delete;
 
-        CudaCsrGraph &operator=(CudaCsrGraph &&other) noexcept;
+        CudaCsrGraph(CudaCsrGraph &&) noexcept = default;
+
+        CudaCsrGraph &operator=(CudaCsrGraph &&) noexcept = default;
 
         /* ------------------------------------------------------------------------
          * Observers
          * --------------------------------------------------------------------- */
 
-        /**
-         * @brief Return the number of vertices.
-         */
         [[nodiscard]] std::size_t num_vertices() const noexcept;
 
-        /**
-         * @brief Return the number of edges.
-         */
         [[nodiscard]] std::size_t num_edges() const noexcept;
 
-        /**
-         * @brief Return whether the graph is weighted.
-         */
         [[nodiscard]] bool is_weighted() const noexcept;
 
         /**
@@ -105,22 +97,12 @@ namespace gpupath {
         [[nodiscard]] const double *weights_data() const noexcept;
 
     private:
-        /**
-         * @brief Validate host-side CSR storage invariants for an unweighted graph.
-         *
-         * @throws std::invalid_argument If invariants are violated.
-         */
         static void validate(
             std::size_t num_vertices,
             const std::vector<int> &indptr,
             const std::vector<int> &indices
         );
 
-        /**
-         * @brief Validate host-side CSR storage invariants for a weighted graph.
-         *
-         * @throws std::invalid_argument If invariants are violated.
-         */
         static void validate(
             std::size_t num_vertices,
             const std::vector<int> &indptr,
@@ -128,18 +110,13 @@ namespace gpupath {
             const std::vector<double> &weights
         );
 
-        /**
-         * @brief Release owned device buffers.
-         */
-        void release() noexcept;
-
     private:
         std::size_t num_vertices_{0};
         std::size_t num_edges_{0};
         bool is_weighted_{false};
 
-        int *d_indptr_{nullptr};
-        int *d_indices_{nullptr};
-        double *d_weights_{nullptr};
+        cuda::DeviceBuffer<int> d_indptr_;
+        cuda::DeviceBuffer<int> d_indices_;
+        cuda::DeviceBuffer<double> d_weights_;
     };
 } // namespace gpupath
